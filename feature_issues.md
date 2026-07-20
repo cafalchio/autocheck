@@ -1,119 +1,52 @@
-# AutoCheck — Feature Enhancement Issues
+# Feature: Setup Screen Tabs
 
-This document lists the next wave of improvements, split into individual implementable issues. Each issue is self-contained with clear acceptance criteria. Issues are grouped by theme and ordered so that dependencies come first.
-
----
-
-## Issue F-01 — Improve setup screen alignment and layout consistency
-
-### Summary
-
-The setup screen has inconsistent inner padding, the form fields stretch across the full terminal width with no max-width cap, and the help bar text can overflow on narrow terminals.
-
-### Files likely involved
-
-- `src/draw.rs`
-
-### Requirements
-
-- Centre the setup form horizontally with a maximum content width of 80 columns (use horizontal `Constraint::Percentage` margins on wide terminals).
-- Add 1-cell inner padding on left and right inside every form field border so typed text does not touch the border glyph.
-- Align all three field labels flush-left with consistent capitalisation.
-- Truncate the help bar text with `…` instead of wrapping or overflowing when the terminal is narrower than the text.
-- Ensure the checkout log area uses the same horizontal bounds as the form fields (no wider, no narrower).
-
-### Acceptance Criteria
-
-- On an 80-column terminal, form fields are full-width and neatly bordered.
-- On a 200-column terminal, the form is centred and capped at 80 columns.
-- No text visually clips or bleeds into borders.
-- Help text never wraps onto a second line; it truncates with `…`.
+Add a tabbed interface to the setup screen. The existing form becomes the **Run** tab.
+A new **Settings** tab exposes all persistent configuration options that are currently
+hardcoded or hidden in `SavedConfig` / `ChecksConfig`.
 
 ---
 
-## Issue F-02 — Improve runner screen layout and column alignment
+## Issue T-1 — Add tab state to App and wire Tab/Shift+Tab
 
 ### Summary
 
-The left check-list pane has no scrolling when the list is taller than the visible area, check names are not indented consistently, and the elapsed time column is not right-aligned.
-
-### Files likely involved
-
-- `src/draw.rs`
-- `src/app.rs`
-
-### Requirements
-
-- Track a `list_scroll_offset: usize` in `App` so the cursor can scroll the check list when it goes out of view (keep cursor visible, scroll by one when it moves past either edge).
-- Update `list_up` / `list_down` in `app.rs` to bump `list_scroll_offset` when needed.
-- Render only the visible window of entries in `draw_check_list`, starting at `list_scroll_offset`.
-- Right-align the elapsed time column in the check list (pad between name and time).
-- Indent check rows by exactly 4 spaces after the selection bracket so check names align regardless of bracket width.
-
-### Acceptance Criteria
-
-- A config with more checks than the terminal height can display is scrollable with `↑`/`↓`.
-- Cursor never goes off-screen.
-- Elapsed time `0.3s` right-aligns with `12.4s` in the same column.
-
----
-
-## Issue F-03 — Add richer status and UI icons
-
-### Summary
-
-Status icons use plain Unicode circles/ticks. Replace them with a consistent, visually distinct icon set and add a group-level status icon that reflects the worst status of its checks.
+Track which setup tab is active (`Run` or `Settings`) in `App` state and switch between
+them with keyboard input.
 
 ### Files likely involved
 
 - `src/app.rs`
-- `src/draw.rs`
+- `src/main.rs`
 
 ### Requirements
 
-Replace `CheckStatus::icon()` return values:
-
-| Status | New icon |
-|---|---|
-| Pending | `·` |
-| Running | `⟳` |
-| Passed | `✔` |
-| Failed | `✘` |
-| Skipped | `⊘` |
-| ManualPassed | `✔` |
-| ManualFailed | `✘` |
-
-Add a `group_status_icon(group_idx)` helper on `App` that returns:
-- `✘` if any check in the group failed
-- `✔` if all selected checks in the group passed
-- `⟳` if any check is running
-- `·` otherwise
-
-Show this icon beside the group label in the check list.
-
-Add a mode icon to the runner header beside the mode string:
-
-| Mode | Icon |
-|---|---|
-| Selecting | `⊙` |
-| Running | `⟳` |
-| Done (all pass) | `✔` |
-| Done (any fail) | `✘` |
-| Awaiting verdict | `?` |
+- Add `pub setup_tab: SetupTab` to `App`.
+- Add `pub enum SetupTab { Run, Settings }` (derives `Clone`, `PartialEq`).
+- `SetupTab` starts as `Run`.
+- Add `App::setup_tab_next()` and `App::setup_tab_prev()` that cycle through the two tabs.
+- In `handle_key` for `AppMode::Setup`, map:
+  - `F1` → `SetupTab::Run`
+  - `F2` → `SetupTab::Settings`
+  - When `config_dropdown_open` is false, `Tab` key no longer calls `setup_focus_next()` —
+    instead if focus is on the *last* field of the current tab, advance to the next tab
+    (wrap-around). If not on the last field, advance focus within the tab as before.
+    `Shift+Tab` (`BackTab`) moves backward similarly.
+- `Esc` always closes any dropdown and does **not** change tab.
 
 ### Acceptance Criteria
 
-- All new icons are visually distinct in a standard terminal font.
-- Group icon updates live as checks complete.
-- Mode icon in header is correct for every mode.
+- `App::new()` starts with `setup_tab == SetupTab::Run`.
+- Pressing `F1` / `F2` switches tabs.
+- `cargo check` passes.
 
 ---
 
-## Issue F-04 — Expand and standardise the colour palette
+## Issue T-2 — Render the tab bar at the top of the setup screen
 
 ### Summary
 
-The current colour usage is inconsistent: some borders use `Color::White` implicitly, the cursor highlight uses a hard `DarkGray` background that is invisible on light terminals, and status colours are scattered inline rather than centralised.
+Replace the plain title `Paragraph` on the setup screen with a Ratatui `Tabs` widget
+that shows `Run` and `Settings` as tab titles.
 
 ### Files likely involved
 
@@ -121,233 +54,267 @@ The current colour usage is inconsistent: some borders use `Color::White` implic
 
 ### Requirements
 
-- Extract a `theme` module (or a `const` block) in `draw.rs` that defines named colours for:
-  - `BORDER_FOCUSED`, `BORDER_UNFOCUSED`
-  - `STATUS_PASS`, `STATUS_FAIL`, `STATUS_RUNNING`, `STATUS_SKIP`, `STATUS_PENDING`
-  - `GROUP_HEADER_DEFAULT`
-  - `CURSOR_BG`, `CURSOR_FG`
-  - `ERROR_FG`, `WARN_FG`, `INFO_FG`
-  - `HEADER_TITLE`, `HEADER_PATH`, `HEADER_BRANCH`
-- Replace all scattered `Color::*` literals in rendering functions with these named constants.
-- Change the cursor highlight from a plain `DarkGray` background to a `Color::Rgb(40, 40, 80)` background with `Color::White` foreground so it is visible on both dark and light themes.
-- Add `Color::Rgb` support to `color_from_str` for hex-like strings e.g. `"#3a7bd5"` (parse `#RRGGBB`).
+- Import `ratatui::widgets::Tabs`.
+- In `draw_setup`, replace the title `Paragraph` / `Borders::BOTTOM` block with a `Tabs`
+  widget in the same 3-line slot (`chunks[0]`).
+- Tab titles: `" Run "` and `" Settings "`.
+- The selected tab is highlighted (`Color::Cyan` fg, `Modifier::BOLD`); inactive tabs use
+  `Color::DarkGray`.
+- The `Tabs` block uses `Borders::BOTTOM` and the same dim border style already in use
+  (`Color::Rgb(60, 60, 100)`).
+- Pass `app.setup_tab` (as a `usize` index) to `Tabs::select()`.
+- Below the tab bar, render only the content for the active tab (delegate to two private
+  helpers: `draw_setup_run_tab` and `draw_setup_settings_tab`).
 
 ### Acceptance Criteria
 
-- All status colours reference the theme constants, not inline literals.
-- Cursor is clearly visible on a dark terminal.
-- `color_from_str("#1a2b3c")` returns `Color::Rgb(0x1a, 0x2b, 0x3c)`.
+- Both tabs are visible in the tab bar.
+- The active tab is visually distinct.
+- Switching tabs (via T-1) changes which content is shown.
+- `cargo check` passes.
+
+---
+
+## Issue T-3 — Move the Run tab content into its own helper
+
+### Summary
+
+Extract the existing project-path / branch / config-selector / error / checkout-log /
+help-bar rendering from `draw_setup` into a dedicated `draw_setup_run_tab` function.
+No behaviour change — this is a pure refactor to make T-4 clean.
+
+### Files likely involved
+
+- `src/draw.rs`
+
+### Requirements
+
+- Create `fn draw_setup_run_tab(f: &mut Frame, app: &App, area: Rect)`.
+- Move the form rows, config dropdown, checkout log, and help bar into it unchanged.
+- `draw_setup` calls this function when `app.setup_tab == SetupTab::Run`.
+- No logic changes.
+
+### Acceptance Criteria
+
+- Run tab looks identical to the setup screen before this change.
 - `cargo test` passes.
 
 ---
 
-## Issue F-05 — Interactive JSON config file picker (filesystem browser)
+## Issue T-4 — Add Settings tab fields to App state
 
 ### Summary
 
-Config discovery is silent and automatic. When no config is found, or when the user wants to pick a file not in the standard search paths, there is no way to browse the filesystem. Add a dedicated file-picker overlay on the setup screen.
+Add the editable fields shown on the Settings tab to `App` and to `SavedConfig`, so they
+can be persisted between sessions.
 
 ### Files likely involved
 
 - `src/app.rs`
-- `src/draw.rs`
-- `src/main.rs`
+- `src/config.rs`
 
 ### Requirements
 
-- Add a new `AppMode::FilePicker { origin: FilePickerOrigin }` where `FilePickerOrigin` is `Config`.
-- The picker is opened from the Config field with a new key (e.g. `o` for "open").
-- The picker shows a scrollable directory listing of the current browse directory.
-- Entries are displayed as `📁 dirname/` or `📄 filename.json` (filter to `.json` files and directories only).
-- `↑`/`↓` moves the cursor; `Enter` enters a directory or selects a file; `Backspace` goes up one level; `Esc` cancels without changing the selection.
-- On file selection, validate it as a `ChecksConfig`; show an inline error if invalid; close the picker on success.
-- Persist the selected path in `App.config_paths` if not already present.
+Add to `SavedConfig` (new `key=value` lines):
 
-### Acceptance Criteria
+| Key | Default | Description |
+|---|---|---|
+| `run_log_path` | `last_run.log` | Path for `last_run.log` written after every run |
+| `failed_log_path` | `last_failed.log` | Path for failed-checks log (overrides per-config value) |
+| `audit_dir` | `.autocheck/runs` | Directory where timestamped audit logs are archived |
+| `mouse_capture_default` | `true` | Whether mouse capture is enabled at startup |
 
-- Pressing `o` on the Config field opens the picker.
-- User can navigate directories and select a `.json` file.
-- Invalid JSON files show an error instead of crashing.
-- `Esc` returns to setup with the previous config unchanged.
-- Selecting a valid file loads its checks immediately.
+- `SavedConfig::parse` reads these new keys; unknown keys are still silently ignored.
+- `SavedConfig::to_string_repr` writes all fields.
+- Round-trip tests cover the new keys.
 
----
+Add to `App`:
 
-## Issue F-06 — Interactive project path selector (filesystem browser)
-
-### Summary
-
-The project path field is a free-text input. Add tab-completion / directory picker so the user does not need to type an absolute path from memory.
-
-### Files likely involved
-
-- `src/app.rs`
-- `src/draw.rs`
-- `src/main.rs`
-
-### Requirements
-
-- Reuse the file-picker mechanism from F-05 with `FilePickerOrigin::ProjectPath`.
-- Open with `o` key when the Project path field is focused.
-- Only directories are shown and selectable (no file extension filter).
-- On selection, close the picker, populate `setup_project_path`, and immediately run `detect_current_branch`.
-- Directory entries show a trailing `/`.
-
-### Acceptance Criteria
-
-- `o` on the Project path field opens a directory browser.
-- Only directories are shown.
-- Selecting a directory closes the picker, fills the field, and shows the detected branch.
-- Resolves to an absolute path.
-
-> **Dependency:** Implement after F-05 to reuse the picker infrastructure.
-
----
-
-## Issue F-07 — Interactive branch selector (git branch list)
-
-### Summary
-
-The branch field is free-text. Add a picker that reads local Git branches for the selected project and lets the user choose with `↑`/`↓`.
-
-### Files likely involved
-
-- `src/app.rs`
-- `src/draw.rs`
-- `src/main.rs`
-
-### Requirements
-
-- Add `get_local_branches(repo: &PathBuf) -> Vec<String>` using `git branch --list --format=%(refname:short)`.
-- Add a `BranchPicker` overlay mode (can reuse the generic List overlay pattern from F-05).
-- Open with `o` when the Branch field is focused (only if a valid project path is already set).
-- Show branch list, current branch highlighted.
-- `↑`/`↓` navigates; `Enter` selects; `Esc` cancels.
-- Typed characters filter the list in real time.
-- Remote branches (`git branch -r`) are shown in a separate section below local branches.
-
-### Acceptance Criteria
-
-- `o` on Branch field opens the picker (only when project path is a valid repo).
-- List shows all local branches.
-- Filtering by typing narrows the list.
-- Selecting sets `setup_branch`.
-- Non-Git repos show a "Not a git repository" message instead of an empty list.
-
-> **Dependency:** Implement after F-06 (project path must be resolved first).
-
----
-
-## Issue F-08 — Output pane scroll indicators and keyboard scroll improvements
-
-### Summary
-
-The output pane has no visual indication of how far through the log the user is, and the scroll position does not reset when switching between checks. `PageUp`/`PageDown` jump by a fixed 20 lines regardless of terminal height.
-
-### Files likely involved
-
-- `src/draw.rs`
-- `src/app.rs`
-
-### Requirements
-
-- Add a scrollbar to the right edge of the output pane (use `ratatui::widgets::Scrollbar` introduced in ratatui 0.24+).
-- Show current scroll position as `line N / total` in the output pane title bar.
-- Reset `output_scroll` to the bottom when switching to a new check's log in `list_up`/`list_down`.
-- Change `page_up`/`page_down` to use the actual visible pane height (store `output_pane_height: u16` in `App`, set each draw tick) rather than a hardcoded 20.
-- Add `Home` key to scroll to top and `End` key to scroll to bottom.
-- Auto-tail (scroll-to-bottom) should only engage when `output_scroll` is already within 2 lines of the tail; otherwise a user who scrolled up should not have their position yanked back.
-
-### Acceptance Criteria
-
-- Scrollbar is visible and positioned correctly.
-- Title shows `Output (live) — line 42/120`.
-- `Home` / `End` jump to top/bottom.
-- Manual scroll-up stops auto-tail; reaching bottom re-enables it.
-- Page size matches the visible pane height.
-
----
-
-## Issue F-09 — Persist run audit log with timestamp index
-
-### Summary
-
-`last_run.log` is overwritten on every run, so previous runs are lost. Add a timestamped audit directory so every run's output is permanently archived.
-
-### Files likely involved
-
-- `src/app.rs`
-
-### Requirements
-
-- After every completed run, write a dated log file:
-  `<repo_root>/.autocheck/runs/YYYY-MM-DDTHH-MM-SS.log`
-- The file format is identical to the current `last_run.log`.
-- Create `.autocheck/runs/` if it does not exist.
-- Keep `last_run.log` and `last_failed.log` in place for backward compatibility.
-- Add a `.autocheck/runs/index.txt` that appends one line per run:
-  `YYYY-MM-DDTHH-MM-SS  pass:N fail:N skip:N  <branch>`
-- Trim the index to the most recent 100 entries.
-
-### Acceptance Criteria
-
-- After each run a new dated file appears in `.autocheck/runs/`.
-- `index.txt` has one entry per run.
-- `last_run.log` still exists and is still current.
-- Re-running without changes does not corrupt existing entries.
-- `cargo test` passes (no file-system side effects in unit tests).
-
----
-
-## Issue F-10 — Audit log viewer (browse previous runs inside the TUI)
-
-### Summary
-
-The audit logs written by F-09 are inaccessible from inside the app. Add a log audit browser so users can review previous runs without leaving the terminal.
-
-### Files likely involved
-
-- `src/app.rs`
-- `src/draw.rs`
-- `src/main.rs`
-
-### Requirements
-
-- Add `AppMode::AuditViewer` entered from the Done screen with key `L` (capital L).
-- The viewer shows a two-panel layout:
-  - Left panel: scrollable list of past runs from `index.txt` (most recent first), showing timestamp, branch, pass/fail/skip counts.
-  - Right panel: full content of the selected run's log file, scrollable with `↑`/`↓` / `PageUp`/`PageDown`.
-- `Esc` or `q` returns to the Done screen.
-- If no audit directory exists, show a message: `No previous runs found. Complete a run first.`
-- Runs with any failures are highlighted in red in the left panel; all-pass runs in green.
-
-### Acceptance Criteria
-
-- `L` on the Done screen opens the audit viewer.
-- Left panel lists runs in reverse-chronological order.
-- Right panel shows the full log of the highlighted run.
-- Navigation is keyboard-only.
-- `Esc` / `q` exits back to Done.
-
-> **Dependency:** Implement after F-09.
-
----
-
-## Recommended Implementation Order
-
-```
-F-01  (alignment)        — no dependencies
-F-02  (list scrolling)   — no dependencies
-F-03  (icons)            — no dependencies
-F-04  (colours)          — no dependencies
-F-05  (config picker)    — no dependencies
-F-06  (path picker)      — depends on F-05 (reuse picker)
-F-07  (branch picker)    — depends on F-06
-F-08  (scroll UX)        — no dependencies
-F-09  (audit log write)  — no dependencies
-F-10  (audit viewer)     — depends on F-09
+```rust
+// Settings tab fields (mirrors SavedConfig extra keys)
+pub settings_run_log_path: String,
+pub settings_failed_log_path: String,
+pub settings_audit_dir: String,
+pub settings_mouse_default: bool,
+pub settings_focus: SettingsField,
 ```
 
-F-01 through F-04 and F-08 can all be done in **parallel** (UI only, no shared state changes).  
-F-05, F-06, F-07 are **sequential** (each reuses the previous picker).  
-F-09 and F-10 are **sequential**.
+- Add `pub enum SettingsField { RunLogPath, FailedLogPath, AuditDir, MouseDefault }`.
+- Initialise from `SavedConfig` in `App::new()`.
+- Add `App::settings_focus_next()` and `App::settings_focus_prev()`.
+- Add `App::settings_type_char(c: char)` — appends to focused text field; ignored for
+  `MouseDefault`.
+- Add `App::settings_backspace()` — removes last char from focused text field.
+- Add `App::settings_toggle_mouse()` — flips `settings_mouse_default`.
+
+### Acceptance Criteria
+
+- `SavedConfig` round-trips the four new keys.
+- `App::new()` initialises settings fields from saved config.
+- `cargo test` passes (existing tests still pass; new round-trip tests added).
+
+---
+
+## Issue T-5 — Render the Settings tab content
+
+### Summary
+
+Draw the Settings tab with editable fields for the four configurable paths/flags.
+
+### Files likely involved
+
+- `src/draw.rs`
+
+### Requirements
+
+Create `fn draw_setup_settings_tab(f: &mut Frame, app: &App, area: Rect)`.
+
+Layout (all inside the tab content area, vertical stack):
+
+```
+┌─ Run log path ─────────────────────────────────────────┐
+│  last_run.log                                           │
+└─────────────────────────────────────────────────────────┘
+┌─ Failed log path ───────────────────────────────────────┐
+│  last_failed.log                                        │
+└─────────────────────────────────────────────────────────┘
+┌─ Audit archive dir ─────────────────────────────────────┐
+│  .autocheck/runs                                        │
+└─────────────────────────────────────────────────────────┘
+┌─ Mouse capture on startup  [✓ enabled / ○ disabled] ───┐
+└─────────────────────────────────────────────────────────┘
+  (info line)  Settings saved to ~/.config/autocheck/config
+  (help bar)   Tab next  ↑ prev  Backspace edit  Space toggle  q quit
+```
+
+- Each text field uses the same focused/unfocused border style as the Run tab fields
+  (`BorderType::Thick` when focused, `BorderType::Rounded` otherwise; yellow when
+  focused, `Rgb(80,80,100)` otherwise).
+- `MouseDefault` field renders a toggle line: `[✓] enabled` in green or `[ ] disabled`
+  in gray, toggled with `Space`.
+- An info line at the bottom shows the save path in `DarkGray`.
+- The help bar shows Settings-specific key hints.
+
+### Acceptance Criteria
+
+- All four fields are visible on the Settings tab.
+- Focused field has a yellow thick border.
+- `cargo check` passes.
+
+---
+
+## Issue T-6 — Wire Settings tab keyboard input
+
+### Summary
+
+Hook up typing, backspace, and Space to the Settings tab fields in the key handler.
+
+### Files likely involved
+
+- `src/main.rs`
+- `src/app.rs`
+
+### Requirements
+
+In `handle_key` for `AppMode::Setup`, when `app.setup_tab == SetupTab::Settings`:
+
+- `Tab` / `Down` → `app.settings_focus_next()`
+- `Shift+Tab` / `Up` → `app.settings_focus_prev()`
+- `Backspace` → `app.settings_backspace()`
+- `Char(c)` → `app.settings_type_char(c)` (only for text fields; `MouseDefault` ignores
+  char input)
+- `Space` → `app.settings_toggle_mouse()` when focus is on `SettingsField::MouseDefault`
+- `Enter` → save settings (call `app.save_settings()`, defined below) and switch tab back
+  to `SetupTab::Run`
+- `q` → quit (unchanged)
+
+Add `App::save_settings(&self)`:
+- Construct `SavedConfig` from current `App` state (repo, branch, selected config, plus
+  the four new settings fields).
+- Call `SavedConfig::save()`.
+- Any IO error is silently ignored (same pattern as the rest of the app).
+
+### Acceptance Criteria
+
+- Typing updates the field text.
+- Backspace removes characters.
+- Space toggles the mouse flag.
+- Enter saves and switches back to Run tab.
+- `cargo test` passes.
+
+---
+
+## Issue T-7 — Use Settings values at runtime
+
+### Summary
+
+Replace the hardcoded `"last_run.log"`, `"last_failed.log"`, `.autocheck/runs` paths and
+the startup mouse-capture value with the values from `App`'s settings fields.
+
+### Files likely involved
+
+- `src/app.rs`
+
+### Requirements
+
+- In `App::new()`, set `app.mouse_capture = app.settings_mouse_default` instead of
+  `true`.
+- In `write_logs()`, replace the hardcoded `"last_run.log"` with
+  `self.settings_run_log_path` and the audit dir `.autocheck/runs` with
+  `self.settings_audit_dir`.
+- The `last_failed.log` path already respects `ChecksConfig::path_log_file`; add a
+  fallback to `self.settings_failed_log_path` instead of the literal
+  `"last_failed.log"`.
+
+### Acceptance Criteria
+
+- Changing the run log path in Settings and running checks writes to the new path.
+- Mouse capture respects the saved default.
+- Existing tests still pass.
+
+---
+
+## Issue T-8 — Add tests for Settings tab state
+
+### Summary
+
+Cover the new Settings tab state machine with unit tests.
+
+### Files likely involved
+
+- `src/app.rs`
+- `src/config.rs`
+
+### Requirements
+
+Test in `src/app.rs`:
+
+- `App::new()` starts on `SetupTab::Run`.
+- `settings_focus_next` cycles through all `SettingsField` variants.
+- `settings_type_char` appends to the correct field.
+- `settings_backspace` removes the last character.
+- `settings_toggle_mouse` flips the flag.
+
+Test in `src/config.rs`:
+
+- `SavedConfig::parse` reads the four new keys.
+- `SavedConfig::to_string_repr` writes the four new keys.
+- Round-trip preserves all values.
+
+### Acceptance Criteria
+
+- `cargo test` passes with all new tests green.
+- Tests are deterministic and do not require a real terminal or filesystem.
+
+---
+
+## Implementation Order
+
+1. **T-1** — App state + key wiring (no UI change yet; compiles and tests pass).
+2. **T-2** — Tab bar widget in draw.
+3. **T-3** — Refactor Run tab into helper (no behaviour change).
+4. **T-4** — Settings fields in App + SavedConfig (logic only, no draw).
+5. **T-5** — Draw Settings tab (read-only display wired to new fields).
+6. **T-6** — Key handler for Settings tab (makes fields editable).
+7. **T-7** — Wire saved values into runtime behaviour.
+8. **T-8** — Tests.

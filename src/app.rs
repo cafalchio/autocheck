@@ -24,6 +24,14 @@ pub enum AppMode {
     Done,
 }
 
+// ── Setup tab ──────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SetupTab {
+    Run,
+    Settings,
+}
+
 // ── Setup focus ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,6 +39,16 @@ pub enum SetupField {
     ProjectPath,
     Branch,
     Config,
+}
+
+// ── Settings focus ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SettingsField {
+    RunLogPath,
+    FailedLogPath,
+    AuditDir,
+    MouseDefault,
 }
 
 // ── Check status ───────────────────────────────────────────────────────────
@@ -105,11 +123,19 @@ pub struct App {
     pub staged_files: Vec<String>,
 
     // Setup form
+    pub setup_tab: SetupTab,
     pub setup_project_path: String,
     pub setup_branch: String,
     pub setup_focus: SetupField,
     pub setup_error: Option<String>,
     pub setup_log: Vec<String>,
+
+    // Settings tab fields
+    pub settings_run_log_path: String,
+    pub settings_failed_log_path: String,
+    pub settings_audit_dir: String,
+    pub settings_mouse_default: bool,
+    pub settings_focus: SettingsField,
 
     // Config selector
     pub config_paths: Vec<PathBuf>,
@@ -163,16 +189,22 @@ impl App {
             repo_root: PathBuf::from("."),
             current_branch: String::new(),
             staged_files: Vec::new(),
+            setup_tab: SetupTab::Run,
             setup_project_path: saved.repo.clone(),
             setup_branch: saved.branch.clone(),
             setup_focus: SetupField::ProjectPath,
             setup_error: None,
             setup_log: Vec::new(),
+            settings_run_log_path: saved.run_log_path.clone(),
+            settings_failed_log_path: saved.failed_log_path.clone(),
+            settings_audit_dir: saved.audit_dir.clone(),
+            settings_mouse_default: saved.mouse_capture_default,
+            settings_focus: SettingsField::RunLogPath,
             config_paths,
             config_idx,
             config_dropdown_open: false,
             selected_config_path: None,
-            mouse_capture: true,
+            mouse_capture: saved.mouse_capture_default,
             sys: System::new_all(),
             cpu_usage: 0.0,
             mem_usage: 0.0,
@@ -270,6 +302,20 @@ impl App {
         };
     }
 
+    pub fn setup_tab_next(&mut self) {
+        self.setup_tab = match self.setup_tab {
+            SetupTab::Run => SetupTab::Settings,
+            SetupTab::Settings => SetupTab::Run,
+        };
+    }
+
+    pub fn setup_tab_prev(&mut self) {
+        self.setup_tab = match self.setup_tab {
+            SetupTab::Run => SetupTab::Settings,
+            SetupTab::Settings => SetupTab::Run,
+        };
+    }
+
     pub fn setup_type_char(&mut self, c: char) {
         match self.setup_focus {
             SetupField::ProjectPath => {
@@ -302,6 +348,65 @@ impl App {
             }
             SetupField::Config => {}
         }
+    }
+
+    // ── Settings tab methods ──────────────────────────────────────────────
+
+    pub fn settings_focus_next(&mut self) {
+        self.settings_focus = match self.settings_focus {
+            SettingsField::RunLogPath => SettingsField::FailedLogPath,
+            SettingsField::FailedLogPath => SettingsField::AuditDir,
+            SettingsField::AuditDir => SettingsField::MouseDefault,
+            SettingsField::MouseDefault => SettingsField::RunLogPath,
+        };
+    }
+
+    pub fn settings_focus_prev(&mut self) {
+        self.settings_focus = match self.settings_focus {
+            SettingsField::RunLogPath => SettingsField::MouseDefault,
+            SettingsField::FailedLogPath => SettingsField::RunLogPath,
+            SettingsField::AuditDir => SettingsField::FailedLogPath,
+            SettingsField::MouseDefault => SettingsField::AuditDir,
+        };
+    }
+
+    pub fn settings_type_char(&mut self, c: char) {
+        match self.settings_focus {
+            SettingsField::RunLogPath => self.settings_run_log_path.push(c),
+            SettingsField::FailedLogPath => self.settings_failed_log_path.push(c),
+            SettingsField::AuditDir => self.settings_audit_dir.push(c),
+            SettingsField::MouseDefault => {} // toggle-only field
+        }
+    }
+
+    pub fn settings_backspace(&mut self) {
+        match self.settings_focus {
+            SettingsField::RunLogPath => { self.settings_run_log_path.pop(); }
+            SettingsField::FailedLogPath => { self.settings_failed_log_path.pop(); }
+            SettingsField::AuditDir => { self.settings_audit_dir.pop(); }
+            SettingsField::MouseDefault => {} // toggle-only field
+        }
+    }
+
+    pub fn settings_toggle_mouse(&mut self) {
+        self.settings_mouse_default = !self.settings_mouse_default;
+    }
+
+    pub fn save_settings(&self) {
+        let cfg = SavedConfig {
+            repo: self.setup_project_path.clone(),
+            branch: self.setup_branch.clone(),
+            selected_config: self
+                .selected_config_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            run_log_path: self.settings_run_log_path.clone(),
+            failed_log_path: self.settings_failed_log_path.clone(),
+            audit_dir: self.settings_audit_dir.clone(),
+            mouse_capture_default: self.settings_mouse_default,
+        };
+        let _ = cfg.save();
     }
 
     // ── Setup confirmation (T-11) ─────────────────────────────────────────
@@ -346,6 +451,10 @@ impl App {
                 .as_ref()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default(),
+            run_log_path: self.settings_run_log_path.clone(),
+            failed_log_path: self.settings_failed_log_path.clone(),
+            audit_dir: self.settings_audit_dir.clone(),
+            mouse_capture_default: self.settings_mouse_default,
         };
         let _ = saved.save();
 
@@ -841,10 +950,10 @@ impl App {
                 }
             }
         }
-        let _ = std::fs::write(self.repo_root.join("last_run.log"), &run_content);
+        let _ = std::fs::write(self.repo_root.join(&self.settings_run_log_path), &run_content);
 
         // ── Audit archive ──────────────────────────────────────────────────
-        let audit_dir = self.repo_root.join(".autocheck").join("runs");
+        let audit_dir = self.repo_root.join(&self.settings_audit_dir);
         if std::fs::create_dir_all(&audit_dir).is_ok() {
             // Timestamp: use SystemTime to build YYYY-MM-DDTHH-MM-SS
             let ts = {
@@ -893,7 +1002,7 @@ impl App {
                     .ok()
                     .and_then(|c| c.path_log_file)
             })
-            .unwrap_or_else(|| "last_failed.log".to_string());
+            .unwrap_or_else(|| self.settings_failed_log_path.clone());
 
         let mut fail_content = header;
         let mut has_failures = false;
@@ -1185,11 +1294,17 @@ mod tests {
             repo_root: PathBuf::from("."),
             current_branch: String::new(),
             staged_files: Vec::new(),
+            setup_tab: SetupTab::Run,
             setup_project_path: String::new(),
             setup_branch: String::new(),
             setup_focus: SetupField::ProjectPath,
             setup_error: None,
             setup_log: Vec::new(),
+            settings_run_log_path: "last_run.log".into(),
+            settings_failed_log_path: "last_failed.log".into(),
+            settings_audit_dir: ".autocheck/runs".into(),
+            settings_mouse_default: true,
+            settings_focus: SettingsField::RunLogPath,
             config_paths: Vec::new(),
             config_idx: 0,
             config_dropdown_open: false,
@@ -1287,5 +1402,53 @@ mod tests {
         app.reset_run_state();
         assert!(matches!(app.statuses[0], CheckStatus::Pending));
         assert!(app.output_lines.is_empty());
+    }
+
+    #[test]
+    fn test_app_starts_on_run_tab() {
+        let app = App::new();
+        assert_eq!(app.setup_tab, SetupTab::Run);
+    }
+
+    #[test]
+    fn test_settings_focus_cycles() {
+        let mut app = make_app_with_checks(vec![]);
+        // starts at RunLogPath (set by make_app_with_checks)
+        assert_eq!(app.settings_focus, SettingsField::RunLogPath);
+        app.settings_focus_next();
+        assert_eq!(app.settings_focus, SettingsField::FailedLogPath);
+        app.settings_focus_next();
+        assert_eq!(app.settings_focus, SettingsField::AuditDir);
+        app.settings_focus_next();
+        assert_eq!(app.settings_focus, SettingsField::MouseDefault);
+        app.settings_focus_next();
+        assert_eq!(app.settings_focus, SettingsField::RunLogPath);
+    }
+
+    #[test]
+    fn test_settings_type_char_appends() {
+        let mut app = make_app_with_checks(vec![]);
+        app.settings_focus = SettingsField::RunLogPath;
+        app.settings_type_char('x');
+        assert!(app.settings_run_log_path.ends_with('x'));
+    }
+
+    #[test]
+    fn test_settings_backspace_removes() {
+        let mut app = make_app_with_checks(vec![]);
+        app.settings_run_log_path = "abc".into();
+        app.settings_focus = SettingsField::RunLogPath;
+        app.settings_backspace();
+        assert_eq!(app.settings_run_log_path, "ab");
+    }
+
+    #[test]
+    fn test_settings_toggle_mouse() {
+        let mut app = make_app_with_checks(vec![]);
+        let original = app.settings_mouse_default;
+        app.settings_toggle_mouse();
+        assert_eq!(app.settings_mouse_default, !original);
+        app.settings_toggle_mouse();
+        assert_eq!(app.settings_mouse_default, original);
     }
 }

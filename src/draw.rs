@@ -2,11 +2,11 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Tabs, Wrap},
     Frame,
 };
 
-use crate::app::{App, AppMode, CheckStatus, ListEntry, SetupField};
+use crate::app::{App, AppMode, CheckStatus, ListEntry, SettingsField, SetupField, SetupTab};
 
 // ── Theme ─────────────────────────────────────────────────────────────────
 mod theme {
@@ -128,20 +128,25 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
         .split(inner_area);
     let area = horiz[1];
 
-    // Outer layout: title / form / log / help
+    // Split into tab bar + content
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // title
-            Constraint::Length(10), // form
-            Constraint::Min(3),     // checkout log
-            Constraint::Length(2),  // help
+            Constraint::Length(3), // tab bar
+            Constraint::Min(0),    // tab content
         ])
         .split(area);
 
-    // ── Title ────────────────────────────────────────────────────────────
-    let title = Paragraph::new("  ✦ AutoCheck — Setup")
-        .style(
+    // ── Tab bar ──────────────────────────────────────────────────────────
+    let selected_tab = match app.setup_tab {
+        SetupTab::Run => 0,
+        SetupTab::Settings => 1,
+    };
+    let tab_titles = vec![" Run ", " Settings "];
+    let tabs = Tabs::new(tab_titles)
+        .select(selected_tab)
+        .style(Style::default().fg(Color::DarkGray))
+        .highlight_style(
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -151,7 +156,25 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
                 .borders(Borders::BOTTOM)
                 .border_style(Style::default().fg(Color::Rgb(60, 60, 100))),
         );
-    f.render_widget(title, chunks[0]);
+    f.render_widget(tabs, chunks[0]);
+
+    // ── Tab content ──────────────────────────────────────────────────────
+    match app.setup_tab {
+        SetupTab::Run => draw_setup_run_tab(f, app, chunks[1]),
+        SetupTab::Settings => draw_setup_settings_tab(f, app, chunks[1]),
+    }
+}
+
+fn draw_setup_run_tab(f: &mut Frame, app: &App, area: Rect) {
+    // Outer layout: form / log / help
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(10), // form
+            Constraint::Min(3),     // checkout log
+            Constraint::Length(2),  // help
+        ])
+        .split(area);
 
     // ── Form ─────────────────────────────────────────────────────────────
     let form_rows = Layout::default()
@@ -162,7 +185,7 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
             Constraint::Length(3), // config
             Constraint::Min(1),    // error
         ])
-        .split(chunks[1]);
+        .split(chunks[0]);
 
     // Project path
     let path_focused = app.setup_focus == SetupField::ProjectPath;
@@ -323,7 +346,7 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
                     .title(" Checkout output "),
             )
             .wrap(Wrap { trim: false });
-        f.render_widget(log_para, chunks[2]);
+        f.render_widget(log_para, chunks[1]);
     }
 
     // ── Help bar ─────────────────────────────────────────────────────────
@@ -333,7 +356,76 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
     let help = Paragraph::new(help_trimmed)
         .block(Block::default())
         .style(Style::default().fg(theme::HELP_TEXT));
-    f.render_widget(help, chunks[3]);
+    f.render_widget(help, chunks[2]);
+}
+
+fn draw_setup_settings_tab(f: &mut Frame, app: &App, area: Rect) {
+    let chunks = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Length(3),
+        Constraint::Length(3),
+        Constraint::Length(3),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .split(area);
+
+    // Helper: build a block with focused/unfocused border style
+    fn make_block(title: &str, focused: bool) -> Block<'_> {
+        let (border_type, border_color) = if focused {
+            (BorderType::Thick, theme::BORDER_FOCUSED)
+        } else {
+            (BorderType::Rounded, theme::BORDER_UNFOCUSED)
+        };
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(border_type)
+            .border_style(Style::default().fg(border_color))
+            .title(title)
+    }
+
+    // Row 0 – Run log path
+    let focused = app.settings_focus == SettingsField::RunLogPath;
+    let block = make_block(" Run log path ", focused);
+    let para = Paragraph::new(app.settings_run_log_path.as_str()).block(block);
+    f.render_widget(para, chunks[0]);
+
+    // Row 1 – Failed log path
+    let focused = app.settings_focus == SettingsField::FailedLogPath;
+    let block = make_block(" Failed log path ", focused);
+    let para = Paragraph::new(app.settings_failed_log_path.as_str()).block(block);
+    f.render_widget(para, chunks[1]);
+
+    // Row 2 – Audit archive dir
+    let focused = app.settings_focus == SettingsField::AuditDir;
+    let block = make_block(" Audit archive dir ", focused);
+    let para = Paragraph::new(app.settings_audit_dir.as_str()).block(block);
+    f.render_widget(para, chunks[2]);
+
+    // Row 3 – Mouse capture on startup
+    let focused = app.settings_focus == SettingsField::MouseDefault;
+    let block = make_block(" Mouse capture on startup ", focused);
+    let (mouse_text, mouse_color) = if app.settings_mouse_default {
+        ("[✓] enabled", Color::Green)
+    } else {
+        ("[ ] disabled", Color::DarkGray)
+    };
+    let para = Paragraph::new(mouse_text)
+        .block(block)
+        .style(Style::default().fg(mouse_color));
+    f.render_widget(para, chunks[3]);
+
+    // Row 4 – Info line
+    let info = Paragraph::new("  Settings saved to ~/.config/autocheck/config")
+        .style(Style::default().fg(Color::DarkGray));
+    f.render_widget(info, chunks[4]);
+
+    // Row 5 – Help bar
+    let help = Paragraph::new(
+        "  F1 run tab  Tab next  Shift+Tab prev  Backspace edit  Space toggle  q quit",
+    )
+    .style(Style::default().fg(Color::DarkGray));
+    f.render_widget(help, chunks[5]);
 }
 
 // ── Runner screen ─────────────────────────────────────────────────────────
