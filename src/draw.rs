@@ -109,7 +109,15 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
         area,
     );
 
-    // Centre horizontally: max 80 columns
+    // Outer border around the whole setup panel
+    let outer_border = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Rgb(60, 60, 120)));
+    let inner_area = outer_border.inner(area);
+    f.render_widget(outer_border, area);
+
+    // Centre horizontally inside the border: max 80 columns
     let horiz = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -117,7 +125,7 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
             Constraint::Max(80),
             Constraint::Fill(1),
         ])
-        .split(area);
+        .split(inner_area);
     let area = horiz[1];
 
     // Outer layout: title / form / log / help
