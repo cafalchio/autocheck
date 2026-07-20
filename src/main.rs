@@ -108,8 +108,8 @@ fn run_app<B: ratatui::backend::Backend + std::io::Write>(
 /// Handle a key event. Returns true if the app should quit.
 fn handle_key(app: &mut App, code: KeyCode, _mods: KeyModifiers) -> bool {
     match &app.mode.clone() {
-        // ── Setup ──────────────────────────────────────────────────────────
-        AppMode::Setup => {
+        // ── Setup / pickers (treated the same for key handling) ────────────
+        AppMode::Setup | AppMode::FilePicker { .. } | AppMode::BranchPicker => {
             if app.config_dropdown_open {
                 match code {
                     KeyCode::Up => app.prev_config(),
