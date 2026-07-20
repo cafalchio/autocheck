@@ -157,6 +157,8 @@ fn handle_key(app: &mut App, code: KeyCode, _mods: KeyModifiers) -> bool {
             KeyCode::Char('n') => app.select_none(),
             KeyCode::Enter => app.start_running(),
             KeyCode::Char('m') => app.toggle_mouse_capture(),
+            KeyCode::Home => app.scroll_to_top(),
+            KeyCode::End => app.scroll_to_bottom(),
             KeyCode::PageUp => app.page_up(),
             KeyCode::PageDown => app.page_down(),
             _ => {}
@@ -169,6 +171,8 @@ fn handle_key(app: &mut App, code: KeyCode, _mods: KeyModifiers) -> bool {
                 return true;
             }
             KeyCode::Char('r') => app.reset_to_selecting(),
+            KeyCode::Home => app.scroll_to_top(),
+            KeyCode::End => app.scroll_to_bottom(),
             KeyCode::PageUp => app.page_up(),
             KeyCode::PageDown => app.page_down(),
             _ => {}
@@ -192,6 +196,8 @@ fn handle_key(app: &mut App, code: KeyCode, _mods: KeyModifiers) -> bool {
             KeyCode::Char('r') => app.reset_to_selecting(),
             KeyCode::Up => app.list_up(),
             KeyCode::Down => app.list_down(),
+            KeyCode::Home => app.scroll_to_top(),
+            KeyCode::End => app.scroll_to_bottom(),
             KeyCode::PageUp => app.page_up(),
             KeyCode::PageDown => app.page_down(),
             KeyCode::Char('m') => app.toggle_mouse_capture(),

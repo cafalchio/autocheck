@@ -49,11 +49,11 @@ pub enum CheckStatus {
 impl CheckStatus {
     pub fn icon(&self) -> &'static str {
         match self {
-            CheckStatus::Pending => "○",
-            CheckStatus::Running => "●",
-            CheckStatus::Passed | CheckStatus::ManualPassed => "✓",
-            CheckStatus::Failed | CheckStatus::ManualFailed => "✗",
-            CheckStatus::Skipped => "—",
+            CheckStatus::Pending => "·",
+            CheckStatus::Running => "⟳",
+            CheckStatus::Passed | CheckStatus::ManualPassed => "✔",
+            CheckStatus::Failed | CheckStatus::ManualFailed => "✘",
+            CheckStatus::Skipped => "⊘",
         }
     }
 }
@@ -85,12 +85,15 @@ pub struct App {
     // Runner list state
     pub list_entries: Vec<ListEntry>,
     pub list_cursor: usize,
+    pub list_scroll_offset: usize,
+    pub list_visible_height: u16,
     pub list_area: Option<ratatui::layout::Rect>,
 
     // Output
     pub output_lines: Vec<String>,
     pub check_logs: HashMap<usize, Vec<String>>,
     pub output_scroll: usize,
+    pub output_pane_height: u16,
 
     // Execution channel / cancel
     pub log_rx: Option<mpsc::Receiver<String>>,
@@ -148,10 +151,13 @@ impl App {
             elapsed: Vec::new(),
             list_entries: Vec::new(),
             list_cursor: 0,
+            list_scroll_offset: 0,
+            list_visible_height: 20,
             list_area: None,
             output_lines: Vec::new(),
             check_logs: HashMap::new(),
             output_scroll: 0,
+            output_pane_height: 20,
             log_rx: None,
             cancel_flag: None,
             repo_root: PathBuf::from("."),
@@ -410,6 +416,10 @@ impl App {
             self.list_cursor -= 1;
         }
         self.output_scroll = 0;
+        // Scroll the list viewport up if cursor goes above visible area
+        if self.list_cursor < self.list_scroll_offset {
+            self.list_scroll_offset = self.list_cursor;
+        }
     }
 
     pub fn list_down(&mut self) {
@@ -417,6 +427,11 @@ impl App {
             self.list_cursor += 1;
         }
         self.output_scroll = 0;
+        // list_visible_height is updated by draw each frame; use a default of 20 if not set
+        let visible = self.list_visible_height.max(1) as usize;
+        if self.list_cursor >= self.list_scroll_offset + visible {
+            self.list_scroll_offset = self.list_cursor + 1 - visible;
+        }
     }
 
     pub fn toggle_current(&mut self) {
@@ -469,11 +484,21 @@ impl App {
     }
 
     pub fn page_up(&mut self) {
-        self.output_scroll = self.output_scroll.saturating_sub(20);
+        let page = self.output_pane_height.max(1) as usize;
+        self.output_scroll = self.output_scroll.saturating_sub(page);
     }
 
     pub fn page_down(&mut self) {
-        self.output_scroll += 20;
+        let page = self.output_pane_height.max(1) as usize;
+        self.output_scroll += page;
+    }
+
+    pub fn scroll_to_top(&mut self) {
+        self.output_scroll = 0;
+    }
+
+    pub fn scroll_to_bottom(&mut self) {
+        self.output_scroll = self.output_lines.len().saturating_sub(1);
     }
 
     // ── Mouse support (T-14) ──────────────────────────────────────────────
@@ -606,8 +631,9 @@ impl App {
                     if let Some(rest) = m.strip_prefix("OUT:") {
                         self.output_lines.push(rest.to_string());
                         // Auto-tail: keep scroll at end if near end
-                        if self.output_scroll + 50 >= self.output_lines.len().saturating_sub(1) {
-                            self.output_scroll = self.output_lines.len().saturating_sub(1);
+                        let tail = self.output_lines.len().saturating_sub(1);
+                        if self.output_scroll + (self.output_pane_height as usize) + 2 >= tail {
+                            self.output_scroll = tail;
                         }
                     } else if let Some(rest) = m.strip_prefix("LOG:") {
                         let mut parts = rest.splitn(2, ':');
@@ -817,6 +843,47 @@ impl App {
         }
         let _ = std::fs::write(self.repo_root.join("last_run.log"), &run_content);
 
+        // ── Audit archive ──────────────────────────────────────────────────
+        let audit_dir = self.repo_root.join(".autocheck").join("runs");
+        if std::fs::create_dir_all(&audit_dir).is_ok() {
+            // Timestamp: use SystemTime to build YYYY-MM-DDTHH-MM-SS
+            let ts = {
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let secs = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                // Manual UTC decomposition (no chrono dependency)
+                let s = secs % 60;
+                let m = (secs / 60) % 60;
+                let h = (secs / 3600) % 24;
+                let days = secs / 86400;
+                // Approximate date from days-since-epoch (good enough for a log filename)
+                let year = 1970 + days / 365;
+                let day_of_year = days % 365;
+                let month = day_of_year / 30 + 1;
+                let day = day_of_year % 30 + 1;
+                format!("{year:04}-{month:02}-{day:02}T{h:02}-{m:02}-{s:02}")
+            };
+
+            let audit_file = audit_dir.join(format!("{ts}.log"));
+            let _ = std::fs::write(&audit_file, &run_content);
+
+            // Update index.txt
+            let (passed, failed, skipped) = self.summary_counts();
+            let index_line = format!(
+                "{ts}  pass:{passed} fail:{failed} skip:{skipped}  branch:{}\n",
+                self.current_branch
+            );
+            let index_path = audit_dir.join("index.txt");
+            // Read existing, prepend new line, trim to 100 entries
+            let existing = std::fs::read_to_string(&index_path).unwrap_or_default();
+            let mut lines: Vec<&str> = existing.lines().collect();
+            lines.insert(0, index_line.trim_end_matches('\n'));
+            lines.truncate(100);
+            let _ = std::fs::write(&index_path, lines.join("\n") + "\n");
+        }
+
         // last_failed.log
         let log_path = self
             .selected_config_path
@@ -921,6 +988,48 @@ impl App {
             .filter(|s| matches!(s, CheckStatus::Skipped))
             .count();
         (passed, failed, skipped)
+    }
+
+    pub fn group_status_icon(&self, group_idx: usize) -> &'static str {
+        let indices: Vec<usize> = self
+            .check_group_map
+            .iter()
+            .enumerate()
+            .filter(|(_, &gi)| gi == group_idx)
+            .map(|(ci, _)| ci)
+            .collect();
+        if indices
+            .iter()
+            .any(|&ci| matches!(self.statuses[ci], CheckStatus::Running))
+        {
+            return "⟳";
+        }
+        if indices.iter().any(|&ci| {
+            matches!(
+                self.statuses[ci],
+                CheckStatus::Failed | CheckStatus::ManualFailed
+            )
+        }) {
+            return "✘";
+        }
+        if indices.iter().all(|&ci| {
+            !self.selected[ci]
+                || matches!(
+                    self.statuses[ci],
+                    CheckStatus::Passed | CheckStatus::ManualPassed | CheckStatus::Skipped
+                )
+        }) {
+            if indices.iter().any(|&ci| {
+                self.selected[ci]
+                    && matches!(
+                        self.statuses[ci],
+                        CheckStatus::Passed | CheckStatus::ManualPassed
+                    )
+            }) {
+                return "✔";
+            }
+        }
+        "·"
     }
 }
 
@@ -1064,10 +1173,13 @@ mod tests {
             elapsed: vec![None; checks.len()],
             list_entries: Vec::new(),
             list_cursor: 0,
+            list_scroll_offset: 0,
+            list_visible_height: 20,
             list_area: None,
             output_lines: Vec::new(),
             check_logs: HashMap::new(),
             output_scroll: 0,
+            output_pane_height: 20,
             log_rx: None,
             cancel_flag: None,
             repo_root: PathBuf::from("."),

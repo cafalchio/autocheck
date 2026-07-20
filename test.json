@@ -1,0 +1,204 @@
+{
+  "project_root": ".",
+  "path_log_file": "last_failed.log",
+  "groups": [
+    {
+      "label": "Greetings",
+      "color": "Cyan",
+      "checks": [
+        {
+          "name": "hello",
+          "description": "Print a simple hello message",
+          "cmd": ["echo", "Hello from AutoCheck!"],
+          "manual": false
+        },
+        {
+          "name": "world",
+          "description": "Print a second greeting",
+          "cmd": ["echo", "World is looking good."],
+          "manual": false
+        }
+      ]
+    },
+    {
+      "label": "System Info",
+      "color": "Green",
+      "checks": [
+        {
+          "name": "date",
+          "description": "Print the current date and time",
+          "cmd": ["date"],
+          "manual": false
+        },
+        {
+          "name": "whoami",
+          "description": "Print the current user",
+          "cmd": ["whoami"],
+          "manual": false
+        },
+        {
+          "name": "uptime",
+          "description": "Show system uptime",
+          "cmd": ["uptime"],
+          "manual": false
+        }
+      ]
+    },
+    {
+      "label": "Deliberate Failure",
+      "color": "Red",
+      "checks": [
+        {
+          "name": "will-fail",
+          "description": "This check always fails (exit code 1) to demonstrate failure styling",
+          "cmd": ["sh", "-c", "echo 'Something went wrong!' && exit 1"],
+          "manual": false
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    },
+    {
+      "label": "Manual Review",
+      "color": "Yellow",
+      "checks": [
+        {
+          "name": "review",
+          "description": "Manually confirm the output looks correct before proceeding",
+          "cmd": ["echo", "Please review the output above and press p or f."],
+          "manual": true
+        }
+      ]
+    }
+  ]
+}
