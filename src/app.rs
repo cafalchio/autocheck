@@ -15,29 +15,12 @@ use crate::config::SavedConfig;
 
 // ── Modes ──────────────────────────────────────────────────────────────────
 
-/// What the file/dir picker was opened for.
-#[derive(Debug, Clone, PartialEq)]
-pub enum PickerOrigin {
-    Config,
-    ProjectPath,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum AppMode {
     Setup,
-    /// Generic filesystem picker — used for both config and project path.
-    FilePicker {
-        origin: PickerOrigin,
-    },
-    /// Branch list picker — shown over the Branch field.
-    BranchPicker,
     Selecting,
-    Running {
-        idx: usize,
-    },
-    AwaitingManualResult {
-        idx: usize,
-    },
+    Running { idx: usize },
+    AwaitingManualResult { idx: usize },
     Done,
 }
 
@@ -82,15 +65,6 @@ impl CheckStatus {
 pub enum ListEntry {
     Group { group_idx: usize },
     Check { group_idx: usize, check_idx: usize },
-}
-
-// ── Picker entry ──────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone)]
-pub struct PickerEntry {
-    pub name: String,
-    pub path: PathBuf,
-    pub is_dir: bool,
 }
 
 // ── App ────────────────────────────────────────────────────────────────────
@@ -142,20 +116,6 @@ pub struct App {
     pub config_idx: usize,
     pub config_dropdown_open: bool,
     pub selected_config_path: Option<PathBuf>,
-
-    // ── File/dir picker state (F-05 / F-06) ──────────────────────────────
-    pub picker_dir: PathBuf,              // current browse directory
-    pub picker_entries: Vec<PickerEntry>, // listed entries
-    pub picker_cursor: usize,
-    pub picker_scroll: usize,
-    pub picker_filter: String, // typed filter (used by branch picker)
-
-    // ── Branch picker state (F-07) ────────────────────────────────────────
-    pub branch_list: Vec<String>,        // local branches
-    pub branch_remote_list: Vec<String>, // remote branches
-    pub branch_filter: String,
-    pub branch_cursor: usize,
-    pub branch_scroll: usize,
 
     // Mouse
     pub mouse_capture: bool,
@@ -212,16 +172,6 @@ impl App {
             config_idx,
             config_dropdown_open: false,
             selected_config_path: None,
-            picker_dir: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-            picker_entries: Vec::new(),
-            picker_cursor: 0,
-            picker_scroll: 0,
-            picker_filter: String::new(),
-            branch_list: Vec::new(),
-            branch_remote_list: Vec::new(),
-            branch_filter: String::new(),
-            branch_cursor: 0,
-            branch_scroll: 0,
             mouse_capture: true,
             sys: System::new_all(),
             cpu_usage: 0.0,
@@ -1244,16 +1194,6 @@ mod tests {
             config_idx: 0,
             config_dropdown_open: false,
             selected_config_path: None,
-            picker_dir: PathBuf::from("."),
-            picker_entries: Vec::new(),
-            picker_cursor: 0,
-            picker_scroll: 0,
-            picker_filter: String::new(),
-            branch_list: Vec::new(),
-            branch_remote_list: Vec::new(),
-            branch_filter: String::new(),
-            branch_cursor: 0,
-            branch_scroll: 0,
             mouse_capture: true,
             sys: System::new(),
             cpu_usage: 0.0,

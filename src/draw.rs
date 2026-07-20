@@ -61,17 +61,15 @@ fn color_from_str(s: &str) -> Color {
 }
 
 // ── Main draw entry point ─────────────────────────────────────────────────
-
 pub fn draw(f: &mut Frame, app: &mut App) {
     match &app.mode.clone() {
-        AppMode::Setup | AppMode::FilePicker { .. } | AppMode::BranchPicker => draw_setup(f, app),
+        AppMode::Setup => draw_setup(f, app),
         AppMode::Selecting
         | AppMode::Running { .. }
         | AppMode::AwaitingManualResult { .. }
         | AppMode::Done => draw_runner(f, app),
     }
 }
-
 // ── Setup screen ──────────────────────────────────────────────────────────
 
 pub fn draw_setup(f: &mut Frame, app: &App) {
@@ -310,8 +308,6 @@ pub fn draw_runner(f: &mut Frame, app: &mut App) {
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     let mode_str = match &app.mode {
         AppMode::Setup => "Setup",
-        AppMode::FilePicker { .. } => "Pick file",
-        AppMode::BranchPicker => "Pick branch",
         AppMode::Selecting => "Selecting",
         AppMode::Running { .. } => "Running",
         AppMode::AwaitingManualResult { .. } => "Awaiting verdict",
@@ -329,7 +325,7 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
             }
         }
         AppMode::AwaitingManualResult { .. } => "?",
-        AppMode::Setup | AppMode::FilePicker { .. } | AppMode::BranchPicker => " ",
+        AppMode::Setup => " ",
     };
 
     let cpu_color = if app.cpu_usage > 80.0 {
@@ -587,9 +583,7 @@ fn draw_output_pane(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     let text = match &app.mode {
-        AppMode::Setup | AppMode::FilePicker { .. } | AppMode::BranchPicker => {
-            " Tab/↓ next  ↑ prev  Enter confirm  q quit".to_string()
-        }
+        AppMode::Setup => " Tab/↓ next  ↑ prev  Enter confirm  q quit".to_string(),
         AppMode::Selecting => {
             let (p, fail, s) = app.summary_counts();
             format!(
