@@ -27,10 +27,17 @@ pub enum AppMode {
 // ── Setup tab ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum SetupTab {
+    Run,
+    Settings,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum SetupField {
     ProjectPath,
     Branch,
     Config,
+    LogFolder,
 }
 
 // ── Check status ───────────────────────────────────────────────────────────
@@ -106,8 +113,10 @@ pub struct App {
     pub staged_files: Vec<String>,
 
     // Setup form
+    pub setup_tab: SetupTab,
     pub setup_project_path: String,
     pub setup_branch: String,
+    pub setup_log_folder: String,
     pub setup_focus: SetupField,
     pub setup_error: Option<String>,
     pub setup_log: Vec<String>,
@@ -165,8 +174,10 @@ impl App {
             repo_root: PathBuf::from("."),
             current_branch: String::new(),
             staged_files: Vec::new(),
+            setup_tab: SetupTab::Run,
             setup_project_path: saved.repo.clone(),
             setup_branch: saved.branch.clone(),
+            setup_log_folder: saved.log_folder.clone(),
             setup_focus: SetupField::ProjectPath,
             setup_error: None,
             setup_log: Vec::new(),
@@ -261,6 +272,7 @@ impl App {
             SetupField::ProjectPath => SetupField::Branch,
             SetupField::Branch => SetupField::Config,
             SetupField::Config => SetupField::ProjectPath,
+            SetupField::LogFolder => SetupField::LogFolder,
         };
     }
 
@@ -269,6 +281,29 @@ impl App {
             SetupField::ProjectPath => SetupField::Config,
             SetupField::Branch => SetupField::ProjectPath,
             SetupField::Config => SetupField::Branch,
+            SetupField::LogFolder => SetupField::LogFolder,
+        };
+    }
+
+    pub fn setup_tab_next(&mut self) {
+        self.setup_tab = match self.setup_tab {
+            SetupTab::Run => SetupTab::Settings,
+            SetupTab::Settings => SetupTab::Run,
+        };
+        self.setup_focus = match self.setup_tab {
+            SetupTab::Run => SetupField::ProjectPath,
+            SetupTab::Settings => SetupField::LogFolder,
+        };
+    }
+
+    pub fn setup_tab_prev(&mut self) {
+        self.setup_tab = match self.setup_tab {
+            SetupTab::Run => SetupTab::Settings,
+            SetupTab::Settings => SetupTab::Run,
+        };
+        self.setup_focus = match self.setup_tab {
+            SetupTab::Run => SetupField::ProjectPath,
+            SetupTab::Settings => SetupField::LogFolder,
         };
     }
 
@@ -286,7 +321,12 @@ impl App {
                 self.setup_error = None;
                 self.setup_log.clear();
             }
-            SetupField::Config => {} // config field is not text-editable
+            SetupField::Config => {}
+            SetupField::LogFolder => {
+                self.setup_log_folder.push(c);
+                self.setup_error = None;
+                self.setup_log.clear();
+            }
         }
     }
 
@@ -303,6 +343,10 @@ impl App {
                 self.setup_error = None;
             }
             SetupField::Config => {}
+            SetupField::LogFolder => {
+                self.setup_log_folder.pop();
+                self.setup_error = None;
+            }
         }
     }
 
@@ -348,6 +392,7 @@ impl App {
                 .as_ref()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default(),
+            log_folder: self.setup_log_folder.clone(),
         };
         let _ = saved.save();
 
@@ -919,13 +964,22 @@ impl App {
     }
 
     fn audited_state_path(&self) -> PathBuf {
-        self.repo_root.join(".autocheck_audited")
+        let folder = if self.setup_log_folder.trim().is_empty() {
+            "logs"
+        } else {
+            self.setup_log_folder.trim()
+        };
+        self.repo_root.join(folder)
     }
 
     fn audited_log_path(&self, idx: usize) -> PathBuf {
-        self.repo_root
-            .join(".autocheck_audited")
-            .join(format!("{}.log", self.checks[idx].name))
+        let group_label = self.groups[self.check_group_map[idx]]
+            .label
+            .replace([' ', '/'], "_")
+            .to_lowercase();
+        let check_name = self.checks[idx].name.replace([' ', '/'], "_").to_lowercase();
+        self.audited_state_path()
+            .join(format!("{group_label}_{check_name}.log"))
     }
 
     fn load_audited_state(&mut self) {
@@ -1230,8 +1284,10 @@ mod tests {
             repo_root: PathBuf::from("."),
             current_branch: String::new(),
             staged_files: Vec::new(),
+            setup_tab: SetupTab::Run,
             setup_project_path: String::new(),
             setup_branch: String::new(),
+            setup_log_folder: String::new(),
             setup_focus: SetupField::ProjectPath,
             setup_error: None,
             setup_log: Vec::new(),

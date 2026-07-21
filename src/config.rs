@@ -6,6 +6,7 @@ pub struct SavedConfig {
     pub repo: String,
     pub branch: String,
     pub selected_config: String,
+    pub log_folder: String,
 }
 
 impl Default for SavedConfig {
@@ -14,6 +15,7 @@ impl Default for SavedConfig {
             repo: String::new(),
             branch: String::new(),
             selected_config: String::new(),
+            log_folder: String::new(),
         }
     }
 }
@@ -30,6 +32,8 @@ impl SavedConfig {
                 cfg.branch = v.to_string();
             } else if let Some(v) = line.strip_prefix("selected_config=") {
                 cfg.selected_config = v.to_string();
+            } else if let Some(v) = line.strip_prefix("log_folder=") {
+                cfg.log_folder = v.to_string();
             }
             // unknown keys ignored
         }
@@ -39,8 +43,8 @@ impl SavedConfig {
     /// Serialise to key=value format.
     pub fn to_string_repr(&self) -> String {
         format!(
-            "repo={}\nbranch={}\nselected_config={}\n",
-            self.repo, self.branch, self.selected_config,
+            "repo={}\nbranch={}\nselected_config={}\nlog_folder={}\n",
+            self.repo, self.branch, self.selected_config, self.log_folder,
         )
     }
 
@@ -97,11 +101,12 @@ mod tests {
 
     #[test]
     fn test_parse_all_keys() {
-        let content = "repo=/my/repo\nbranch=main\nselected_config=/some/config.json\n";
+        let content = "repo=/my/repo\nbranch=main\nselected_config=/some/config.json\nlog_folder=logs\n";
         let cfg = SavedConfig::parse(content);
         assert_eq!(cfg.repo, "/my/repo");
         assert_eq!(cfg.branch, "main");
         assert_eq!(cfg.selected_config, "/some/config.json");
+        assert_eq!(cfg.log_folder, "logs");
     }
 
     #[test]
@@ -110,6 +115,7 @@ mod tests {
         assert_eq!(cfg.repo, "");
         assert_eq!(cfg.branch, "");
         assert_eq!(cfg.selected_config, "");
+        assert_eq!(cfg.log_folder, "");
     }
 
     #[test]
@@ -126,13 +132,14 @@ mod tests {
             repo: "/repo".into(),
             branch: "dev".into(),
             selected_config: "/cfg.json".into(),
-            ..Default::default()
+            log_folder: "logs".into(),
         };
         let s = cfg.to_string_repr();
         let cfg2 = SavedConfig::parse(&s);
         assert_eq!(cfg2.repo, cfg.repo);
         assert_eq!(cfg2.branch, cfg.branch);
         assert_eq!(cfg2.selected_config, cfg.selected_config);
+        assert_eq!(cfg2.log_folder, cfg.log_folder);
     }
 
 }

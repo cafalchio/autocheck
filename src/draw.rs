@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, AppMode, CheckStatus, ListEntry, SetupField};
+use crate::app::{App, AppMode, CheckStatus, ListEntry, SetupField, SetupTab};
 
 // ── Theme ─────────────────────────────────────────────────────────────────
 mod theme {
@@ -129,10 +129,7 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(4),
-            Constraint::Min(0),
-        ])
+        .constraints([Constraint::Length(4), Constraint::Length(3), Constraint::Min(0)])
         .split(card_area);
 
     let title = Paragraph::new(vec![
@@ -153,7 +150,30 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
     .alignment(Alignment::Center);
     f.render_widget(title, chunks[0]);
 
-    draw_setup_run_tab(f, app, chunks[1]);
+    let selected_tab = match app.setup_tab {
+        SetupTab::Run => 0,
+        SetupTab::Settings => 1,
+    };
+    let tab_titles = vec![" Run checks ", " Settings "];
+    let tabs = ratatui::widgets::Tabs::new(tab_titles)
+        .select(selected_tab)
+        .style(Style::default().fg(theme::TEXT_MUTED))
+        .highlight_style(
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::BOTTOM)
+                .border_style(Style::default().fg(theme::BORDER_UNFOCUSED)),
+        );
+    f.render_widget(tabs, chunks[1]);
+
+    match app.setup_tab {
+        SetupTab::Run => draw_setup_run_tab(f, app, chunks[2]),
+        SetupTab::Settings => draw_setup_settings_tab(f, app, chunks[2]),
+    }
 }
 
 fn setup_input_block(title: &str, focused: bool) -> Block<'_> {
@@ -367,6 +387,65 @@ fn draw_setup_run_tab(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(help, chunks[2]);
 }
 
+
+fn draw_setup_settings_tab(f: &mut Frame, app: &App, area: Rect) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(2),
+        ])
+        .split(area);
+
+    let intro = Paragraph::new(Line::from(vec![
+        Span::styled(
+            "2 ",
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            "Configure log output",
+            Style::default()
+                .fg(theme::TEXT_PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]));
+    f.render_widget(intro, rows[0]);
+
+    let focused = app.setup_focus == SetupField::LogFolder;
+    let block = setup_input_block(" Log folder (relative to repo) ", focused);
+    let value = if app.setup_log_folder.is_empty() {
+        "logs"
+    } else {
+        &app.setup_log_folder
+    };
+    let color = if app.setup_log_folder.is_empty() {
+        theme::TEXT_MUTED
+    } else {
+        theme::TEXT_PRIMARY
+    };
+    let cursor_suffix = if focused { "█" } else { "" };
+    let para = Paragraph::new(format!("  {value}{cursor_suffix}"))
+        .style(Style::default().fg(color))
+        .block(block);
+    f.render_widget(para, rows[2]);
+
+    let details = Paragraph::new(vec![
+        Line::from(" Audited logs are written inside this folder."),
+        Line::from(" File name format: group_check.log"),
+    ])
+    .style(Style::default().fg(theme::TEXT_SECONDARY));
+    f.render_widget(details, rows[4]);
+
+    let help = Paragraph::new(" F1 run tab  Backspace edit  Enter save and return  q quit")
+        .style(Style::default().fg(theme::HELP_TEXT));
+    f.render_widget(help, rows[5]);
+}
 
 // ── Runner screen ─────────────────────────────────────────────────────────
 
