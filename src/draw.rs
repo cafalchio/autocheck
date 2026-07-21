@@ -2,66 +2,46 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Tabs, Wrap},
+    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
-use crate::app::{App, AppMode, CheckStatus, ListEntry, SettingsField, SetupField, SetupTab};
+use crate::app::{App, AppMode, CheckStatus, ListEntry, SetupField};
 
 // ── Theme ─────────────────────────────────────────────────────────────────
 mod theme {
     use ratatui::style::Color;
-    pub const BORDER_FOCUSED: Color = Color::Yellow;
-    pub const BORDER_UNFOCUSED: Color = Color::Rgb(80, 80, 100);
-    pub const STATUS_PASS: Color = Color::Green;
-    pub const STATUS_FAIL: Color = Color::Red;
-    pub const STATUS_RUNNING: Color = Color::Yellow;
-    pub const STATUS_SKIP: Color = Color::DarkGray;
-    pub const STATUS_PENDING: Color = Color::Rgb(160, 160, 160);
-    pub const CURSOR_BG: Color = Color::Rgb(40, 50, 90);
-    pub const CURSOR_FG: Color = Color::White;
-    pub const ERROR_FG: Color = Color::Red;
-    pub const HEADER_TITLE: Color = Color::Cyan;
-    pub const HEADER_BRANCH: Color = Color::Green;
-    pub const HELP_TEXT: Color = Color::DarkGray;
-    // Row background tints for finished checks
-    pub const ROW_PASS_BG: Color = Color::Rgb(0, 40, 0);
-    pub const ROW_FAIL_BG: Color = Color::Rgb(50, 0, 0);
-    pub const ROW_RUNNING_BG: Color = Color::Rgb(40, 40, 0);
-    pub const ROW_SKIP_BG: Color = Color::Rgb(25, 25, 25);
-}
-
-// ── Colour helpers ────────────────────────────────────────────────────────
-
-fn group_color(label: &str) -> Color {
-    // Simple deterministic colour by hash
-    match label.len() % 6 {
-        0 => Color::Green,
-        1 => Color::Cyan,
-        2 => Color::Yellow,
-        3 => Color::Blue,
-        4 => Color::Magenta,
-        _ => Color::White,
-    }
-}
-
-fn color_from_str(s: &str) -> Color {
-    match s.to_lowercase().as_str() {
-        "green" => Color::Green,
-        "red" => Color::Red,
-        "blue" => Color::Blue,
-        "yellow" => Color::Yellow,
-        "cyan" => Color::Cyan,
-        "magenta" => Color::Magenta,
-        "white" => Color::White,
-        s if s.starts_with('#') && s.len() == 7 => {
-            let r = u8::from_str_radix(&s[1..3], 16).unwrap_or(255);
-            let g = u8::from_str_radix(&s[3..5], 16).unwrap_or(255);
-            let b = u8::from_str_radix(&s[5..7], 16).unwrap_or(255);
-            Color::Rgb(r, g, b)
-        }
-        _ => Color::White,
-    }
+    // Calm dark palette with a few purposeful accents.
+    pub const APP_BG: Color = Color::Rgb(8, 10, 18);
+    pub const PANEL_BG: Color = Color::Rgb(14, 17, 28);
+    pub const PANEL_BG_SOFT: Color = Color::Rgb(18, 22, 34);
+    pub const BORDER_FOCUSED: Color = Color::Rgb(255, 215, 0); // Gold
+    pub const BORDER_UNFOCUSED: Color = Color::Rgb(54, 61, 82);
+    pub const TEXT_PRIMARY: Color = Color::Rgb(224, 228, 238);
+    pub const TEXT_SECONDARY: Color = Color::Rgb(148, 156, 178);
+    pub const TEXT_MUTED: Color = Color::Rgb(96, 104, 126);
+    pub const ACCENT: Color = Color::Rgb(100, 200, 255);
+    pub const STATUS_PASS: Color = Color::Rgb(50, 205, 50); // Lime green
+    pub const STATUS_FAIL: Color = Color::Rgb(255, 100, 100); // Light red
+    pub const STATUS_RUNNING: Color = Color::Rgb(255, 165, 0); // Orange
+    pub const STATUS_SKIP: Color = Color::Rgb(128, 128, 128);
+    pub const STATUS_PENDING: Color = Color::Rgb(160, 160, 180);
+    pub const CURSOR_BG: Color = Color::Rgb(50, 60, 100);
+    pub const CURSOR_FG: Color = Color::Rgb(255, 255, 255);
+    pub const ERROR_FG: Color = Color::Rgb(255, 100, 100);
+    pub const HEADER_TITLE: Color = Color::Rgb(100, 200, 255);
+    pub const HEADER_BRANCH: Color = Color::Rgb(144, 238, 144);
+    pub const HELP_TEXT: Color = Color::Rgb(120, 120, 140);
+    // Enhanced row backgrounds with subtle gradients
+    pub const ROW_PASS_BG: Color = Color::Rgb(0, 50, 20);
+    pub const ROW_FAIL_BG: Color = Color::Rgb(10, 35, 70);
+    pub const ROW_RUNNING_BG: Color = Color::Rgb(50, 45, 0);
+    pub const ROW_SKIP_BG: Color = Color::Rgb(30, 30, 35);
+    // Progress bar colors
+    pub const PROGRESS_BG: Color = Color::Rgb(40, 40, 50);
+    pub const PROGRESS_FG: Color = Color::Rgb(100, 200, 255);
+    // Summary panel colors
+    pub const SUMMARY_BG: Color = Color::Rgb(20, 25, 35);
 }
 
 // ── Status row style ──────────────────────────────────────────────────────
@@ -87,6 +67,25 @@ fn status_row_style(status: &CheckStatus, is_cursor: bool) -> Style {
     }
 }
 
+// ── Spinner animation ─────────────────────────────────────────────────────
+fn spinner_frame() -> &'static str {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let idx = (millis / 80) % frames.len() as u128;
+    frames[idx as usize]
+}
+
+// ── Progress bar ──────────────────────────────────────────────────────────
+fn render_progress_bar(width: usize, progress: f32) -> String {
+    let filled = ((width as f32 * progress).round() as usize).min(width);
+    let empty = width.saturating_sub(filled);
+    format!("{}{}", "█".repeat(filled), "░".repeat(empty))
+}
+
 // ── Main draw entry point ─────────────────────────────────────────────────
 pub fn draw(f: &mut Frame, app: &mut App) {
     match &app.mode.clone() {
@@ -105,17 +104,9 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
 
     // Fill background
     f.render_widget(
-        Block::default().style(Style::default().bg(Color::Rgb(10, 10, 20))),
+        Block::default().style(Style::default().bg(theme::APP_BG)),
         area,
     );
-
-    // Outer border around the whole setup panel
-    let outer_border = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(Color::Rgb(60, 60, 120)));
-    let inner_area = outer_border.inner(area);
-    f.render_widget(outer_border, area);
 
     // Centre horizontally inside the border: max 80 columns
     let horiz = Layout::default()
@@ -125,44 +116,66 @@ pub fn draw_setup(f: &mut Frame, app: &App) {
             Constraint::Max(80),
             Constraint::Fill(1),
         ])
-        .split(inner_area);
+        .split(area);
     let area = horiz[1];
 
-    // Split into tab bar + content
+    let setup_card = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme::BORDER_UNFOCUSED))
+        .style(Style::default().bg(theme::PANEL_BG));
+    let card_area = setup_card.inner(area);
+    f.render_widget(setup_card, area);
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // tab bar
-            Constraint::Min(0),    // tab content
+            Constraint::Length(4),
+            Constraint::Min(0),
         ])
-        .split(area);
+        .split(card_area);
 
-    // ── Tab bar ──────────────────────────────────────────────────────────
-    let selected_tab = match app.setup_tab {
-        SetupTab::Run => 0,
-        SetupTab::Settings => 1,
+    let title = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled(
+                "✦ AutoCheck",
+                Style::default()
+                    .fg(theme::ACCENT)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("  setup", Style::default().fg(theme::TEXT_SECONDARY)),
+        ]),
+        Line::from(Span::styled(
+            "Choose the repository and checks configuration for this run.",
+            Style::default().fg(theme::TEXT_MUTED),
+        )),
+    ])
+    .alignment(Alignment::Center);
+    f.render_widget(title, chunks[0]);
+
+    draw_setup_run_tab(f, app, chunks[1]);
+}
+
+fn setup_input_block(title: &str, focused: bool) -> Block<'_> {
+    let border_color = if focused {
+        theme::BORDER_FOCUSED
+    } else {
+        theme::BORDER_UNFOCUSED
     };
-    let tab_titles = vec![" Run ", " Settings "];
-    let tabs = Tabs::new(tab_titles)
-        .select(selected_tab)
-        .style(Style::default().fg(Color::DarkGray))
-        .highlight_style(
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )
-        .block(
-            Block::default()
-                .borders(Borders::BOTTOM)
-                .border_style(Style::default().fg(Color::Rgb(60, 60, 100))),
-        );
-    f.render_widget(tabs, chunks[0]);
-
-    // ── Tab content ──────────────────────────────────────────────────────
-    match app.setup_tab {
-        SetupTab::Run => draw_setup_run_tab(f, app, chunks[1]),
-        SetupTab::Settings => draw_setup_settings_tab(f, app, chunks[1]),
-    }
+    let title_color = if focused {
+        theme::TEXT_PRIMARY
+    } else {
+        theme::TEXT_SECONDARY
+    };
+    Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(border_color))
+        .style(Style::default().bg(theme::PANEL_BG_SOFT))
+        .title(Span::styled(
+            title.to_string(),
+            Style::default().fg(title_color),
+        ))
 }
 
 fn draw_setup_run_tab(f: &mut Frame, app: &App, area: Rect) {
@@ -170,7 +183,7 @@ fn draw_setup_run_tab(f: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(10), // form
+            Constraint::Length(15), // form
             Constraint::Min(3),     // checkout log
             Constraint::Length(2),  // help
         ])
@@ -180,79 +193,85 @@ fn draw_setup_run_tab(f: &mut Frame, app: &App, area: Rect) {
     let form_rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
+            Constraint::Length(1), // intro
+            Constraint::Length(1), // spacing
             Constraint::Length(3), // project path
+            Constraint::Length(1), // spacing
             Constraint::Length(3), // branch
+            Constraint::Length(1), // spacing
             Constraint::Length(3), // config
+            Constraint::Length(1), // spacing
             Constraint::Min(1),    // error
         ])
         .split(chunks[0]);
 
+    let intro = Paragraph::new(Line::from(vec![
+        Span::styled(
+            "1 ",
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            "Configure run target",
+            Style::default()
+                .fg(theme::TEXT_PRIMARY)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            "  ·  Enter confirms when ready",
+            Style::default().fg(theme::TEXT_MUTED),
+        ),
+    ]));
+    f.render_widget(intro, form_rows[0]);
+
     // Project path
     let path_focused = app.setup_focus == SetupField::ProjectPath;
-    let path_style = if path_focused {
-        Style::default()
-            .fg(theme::BORDER_FOCUSED)
-            .add_modifier(Modifier::BOLD)
+    let path_block = setup_input_block(" Project path (required) ", path_focused);
+    let path_value = if app.setup_project_path.is_empty() {
+        "./path/to/project"
     } else {
-        Style::default().fg(theme::BORDER_UNFOCUSED)
+        &app.setup_project_path
     };
-    let path_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(if path_focused {
-            BorderType::Thick
-        } else {
-            BorderType::Rounded
-        })
-        .border_style(path_style)
-        .title(Span::styled(
-            " Project path (required) ",
-            Style::default().add_modifier(Modifier::BOLD),
-        ));
-    let path_text = format!(" {}", app.setup_project_path);
+    let path_text = format!("  {}", path_value);
     let cursor_suffix = if path_focused { "█" } else { "" };
-    let path_para = Paragraph::new(format!("{path_text}{cursor_suffix}")).block(path_block);
-    f.render_widget(path_para, form_rows[0]);
+    let path_color = if app.setup_project_path.is_empty() {
+        theme::TEXT_MUTED
+    } else {
+        theme::TEXT_PRIMARY
+    };
+    let path_para = Paragraph::new(format!("{path_text}{cursor_suffix}"))
+        .style(Style::default().fg(path_color))
+        .block(path_block);
+    f.render_widget(path_para, form_rows[2]);
 
     // Branch
     let branch_focused = app.setup_focus == SetupField::Branch;
-    let branch_style = if branch_focused {
-        Style::default()
-            .fg(theme::BORDER_FOCUSED)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme::BORDER_UNFOCUSED)
-    };
     let detected = if app.current_branch.is_empty() {
         String::new()
     } else {
         format!("  [detected: {}]", app.current_branch)
     };
-    let branch_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(if branch_focused {
-            BorderType::Thick
-        } else {
-            BorderType::Rounded
-        })
-        .border_style(branch_style)
-        .title(Span::styled(
-            format!(" Branch or PR number (optional){detected} "),
-            Style::default().add_modifier(Modifier::BOLD),
-        ));
+    let branch_title = format!(" Branch or PR number (optional){detected} ");
+    let branch_block = setup_input_block(&branch_title, branch_focused);
     let cursor_suffix = if branch_focused { "█" } else { "" };
-    let branch_para =
-        Paragraph::new(format!(" {}{cursor_suffix}", app.setup_branch)).block(branch_block);
-    f.render_widget(branch_para, form_rows[1]);
+    let branch_value = if app.setup_branch.is_empty() {
+        "leave empty to keep current branch"
+    } else {
+        &app.setup_branch
+    };
+    let branch_color = if app.setup_branch.is_empty() {
+        theme::TEXT_MUTED
+    } else {
+        theme::TEXT_PRIMARY
+    };
+    let branch_para = Paragraph::new(format!("  {branch_value}{cursor_suffix}"))
+        .style(Style::default().fg(branch_color))
+        .block(branch_block);
+    f.render_widget(branch_para, form_rows[4]);
 
     // Config selector
     let config_focused = app.setup_focus == SetupField::Config;
-    let config_style = if config_focused {
-        Style::default()
-            .fg(theme::BORDER_FOCUSED)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(theme::BORDER_UNFOCUSED)
-    };
     let config_display = if app.config_paths.is_empty() {
         "  ⚠  No config files found — place a .json config in the current directory".to_string()
     } else {
@@ -265,29 +284,18 @@ fn draw_setup_run_tab(f: &mut Frame, app: &App, area: Rect) {
             app.config_paths.len()
         )
     };
-    let config_block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(if config_focused {
-            BorderType::Thick
-        } else {
-            BorderType::Rounded
-        })
-        .border_style(config_style)
-        .title(Span::styled(
-            " Checks config  [← → to cycle | Space to list] ",
-            Style::default().add_modifier(Modifier::BOLD),
-        ));
-    let config_para = Paragraph::new(config_display).block(config_block);
-    f.render_widget(config_para, form_rows[2]);
+    let config_block =
+        setup_input_block(" Checks config  [← → cycle | Space list] ", config_focused);
+    let config_para = Paragraph::new(config_display)
+        .style(Style::default().fg(theme::TEXT_PRIMARY))
+        .block(config_block);
+    f.render_widget(config_para, form_rows[6]);
 
     // Error area
     if let Some(err) = &app.setup_error {
-        let err_para = Paragraph::new(format!(" ⚠  {err}")).style(
-            Style::default()
-                .fg(theme::ERROR_FG)
-                .add_modifier(Modifier::BOLD),
-        );
-        f.render_widget(err_para, form_rows[3]);
+        let err_para =
+            Paragraph::new(format!(" ⚠  {err}")).style(Style::default().fg(theme::ERROR_FG));
+        f.render_widget(err_para, form_rows[8]);
     }
 
     // ── Config dropdown ──────────────────────────────────────────────────
@@ -321,9 +329,9 @@ fn draw_setup_run_tab(f: &mut Frame, app: &App, area: Rect) {
         );
         // Overlay on top of the config row
         let dropdown_area = Rect {
-            x: form_rows[2].x + 2,
-            y: form_rows[2].y + 3,
-            width: form_rows[2].width.saturating_sub(4),
+            x: form_rows[6].x + 2,
+            y: form_rows[6].y + 3,
+            width: form_rows[6].width.saturating_sub(4),
             height: (app.config_paths.len() as u16 + 2).min(area.height / 2),
         };
         f.render_widget(ratatui::widgets::Clear, dropdown_area);
@@ -359,85 +367,18 @@ fn draw_setup_run_tab(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(help, chunks[2]);
 }
 
-fn draw_setup_settings_tab(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(3),
-        Constraint::Length(1),
-        Constraint::Length(1),
-    ])
-    .split(area);
-
-    // Helper: build a block with focused/unfocused border style
-    fn make_block(title: &str, focused: bool) -> Block<'_> {
-        let (border_type, border_color) = if focused {
-            (BorderType::Thick, theme::BORDER_FOCUSED)
-        } else {
-            (BorderType::Rounded, theme::BORDER_UNFOCUSED)
-        };
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(border_type)
-            .border_style(Style::default().fg(border_color))
-            .title(title)
-    }
-
-    // Row 0 – Run log path
-    let focused = app.settings_focus == SettingsField::RunLogPath;
-    let block = make_block(" Run log path ", focused);
-    let para = Paragraph::new(app.settings_run_log_path.as_str()).block(block);
-    f.render_widget(para, chunks[0]);
-
-    // Row 1 – Failed log path
-    let focused = app.settings_focus == SettingsField::FailedLogPath;
-    let block = make_block(" Failed log path ", focused);
-    let para = Paragraph::new(app.settings_failed_log_path.as_str()).block(block);
-    f.render_widget(para, chunks[1]);
-
-    // Row 2 – Audit archive dir
-    let focused = app.settings_focus == SettingsField::AuditDir;
-    let block = make_block(" Audit archive dir ", focused);
-    let para = Paragraph::new(app.settings_audit_dir.as_str()).block(block);
-    f.render_widget(para, chunks[2]);
-
-    // Row 3 – Mouse capture on startup
-    let focused = app.settings_focus == SettingsField::MouseDefault;
-    let block = make_block(" Mouse capture on startup ", focused);
-    let (mouse_text, mouse_color) = if app.settings_mouse_default {
-        ("[✓] enabled", Color::Green)
-    } else {
-        ("[ ] disabled", Color::DarkGray)
-    };
-    let para = Paragraph::new(mouse_text)
-        .block(block)
-        .style(Style::default().fg(mouse_color));
-    f.render_widget(para, chunks[3]);
-
-    // Row 4 – Info line
-    let info = Paragraph::new("  Settings saved to ~/.config/autocheck/config")
-        .style(Style::default().fg(Color::DarkGray));
-    f.render_widget(info, chunks[4]);
-
-    // Row 5 – Help bar
-    let help = Paragraph::new(
-        "  F1 run tab  Tab next  Shift+Tab prev  Backspace edit  Space toggle  q quit",
-    )
-    .style(Style::default().fg(Color::DarkGray));
-    f.render_widget(help, chunks[5]);
-}
 
 // ── Runner screen ─────────────────────────────────────────────────────────
 
 pub fn draw_runner(f: &mut Frame, app: &mut App) {
     let area = f.area();
 
-    // Outer: header / body / footer
+    // Outer: header / summary / body / footer
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // header
+            Constraint::Length(4), // summary panel
             Constraint::Min(1),    // body
             Constraint::Length(2), // footer
         ])
@@ -446,11 +387,14 @@ pub fn draw_runner(f: &mut Frame, app: &mut App) {
     // ── Header ───────────────────────────────────────────────────────────
     draw_header(f, app, outer[0]);
 
+    // ── Summary Panel ────────────────────────────────────────────────────
+    draw_summary_panel(f, app, outer[1]);
+
     // ── Body: left (checks) / right (output) ─────────────────────────────
     let body = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
-        .split(outer[1]);
+        .split(outer[2]);
 
     // Store list area for mouse hit-testing
     app.list_area = Some(body[0]);
@@ -459,7 +403,103 @@ pub fn draw_runner(f: &mut Frame, app: &mut App) {
     draw_output_pane(f, app, body[1]);
 
     // ── Footer ───────────────────────────────────────────────────────────
-    draw_footer(f, app, outer[2]);
+    draw_footer(f, app, outer[3]);
+}
+
+fn draw_summary_panel(f: &mut Frame, app: &App, area: Rect) {
+    let (passed, failed, skipped) = app.summary_counts();
+    let total = app.checks.len();
+    let selected = app.selected.iter().filter(|&&s| s).count();
+
+    // Calculate progress
+    let completed = passed + failed + skipped;
+    let progress = if total > 0 {
+        completed as f32 / total as f32
+    } else {
+        0.0
+    };
+
+    // Progress bar (use 30 chars width)
+    let bar_width = 30;
+    let progress_bar = render_progress_bar(bar_width, progress);
+
+    // Running checks count
+    let running = app
+        .statuses
+        .iter()
+        .filter(|s| matches!(s, CheckStatus::Running))
+        .count();
+
+    let summary_line = Line::from(vec![
+        Span::raw("  "),
+        Span::styled("✔ ", Style::default().fg(theme::STATUS_PASS)),
+        Span::styled(
+            format!("{:>3}", passed),
+            Style::default().fg(theme::STATUS_PASS),
+        ),
+        Span::raw("  "),
+        Span::styled("✘ ", Style::default().fg(theme::STATUS_FAIL)),
+        Span::styled(
+            format!("{:>3}", failed),
+            Style::default().fg(theme::STATUS_FAIL),
+        ),
+        Span::raw("  "),
+        Span::styled("⊘ ", Style::default().fg(theme::STATUS_SKIP)),
+        Span::styled(
+            format!("{:>3}", skipped),
+            Style::default().fg(theme::STATUS_SKIP),
+        ),
+        Span::raw("  "),
+        Span::styled("◉ ", Style::default().fg(Color::Rgb(120, 180, 200))),
+        Span::styled(
+            format!("{:>3}", selected),
+            Style::default().fg(Color::Rgb(120, 180, 200)),
+        ),
+        Span::raw("  │  "),
+        Span::styled(
+            &progress_bar,
+            Style::default()
+                .fg(theme::PROGRESS_FG)
+                .bg(theme::PROGRESS_BG),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            format!("{}/{} ({:.0}%)", completed, total, progress * 100.0),
+            Style::default().fg(Color::Rgb(180, 180, 200)),
+        ),
+    ]);
+
+    let running_line = if running > 0 {
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(spinner_frame(), Style::default().fg(theme::STATUS_RUNNING)),
+            Span::raw(" "),
+            Span::styled(
+                format!(
+                    "{} check{} running",
+                    running,
+                    if running == 1 { "" } else { "s" }
+                ),
+                Style::default().fg(theme::STATUS_RUNNING),
+            ),
+        ])
+    } else {
+        Line::from("")
+    };
+
+    let summary_block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Rgb(60, 70, 90)))
+        .style(Style::default().bg(theme::SUMMARY_BG))
+        .title(Span::styled(
+            " Summary ",
+            Style::default().fg(Color::Rgb(140, 180, 200)),
+        ));
+
+    let summary_para = Paragraph::new(vec![summary_line, running_line]).block(summary_block);
+
+    f.render_widget(summary_para, area);
 }
 
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
@@ -476,7 +516,7 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         AppMode::Done => {
             let (_, fail, _) = app.summary_counts();
             if fail > 0 {
-                ("✘", Color::Red)
+                ("✘", theme::STATUS_FAIL)
             } else {
                 ("✔", Color::Green)
             }
@@ -486,7 +526,7 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let cpu_color = if app.cpu_usage > 80.0 {
-        Color::Red
+        Color::Blue
     } else if app.cpu_usage > 50.0 {
         Color::Yellow
     } else {
@@ -494,7 +534,7 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let mem_color = if app.mem_usage > 80.0 {
-        Color::Red
+        Color::Blue
     } else if app.mem_usage > 60.0 {
         Color::Yellow
     } else {
@@ -593,45 +633,84 @@ fn draw_check_list(f: &mut Frame, app: &mut App, area: Rect) {
                         .filter(|(ci, _)| app.selected[*ci])
                         .count();
                     let total_in_group = group.checks.len();
-                    let col = group
-                        .color
-                        .as_deref()
-                        .map(color_from_str)
-                        .unwrap_or_else(|| group_color(&group.label));
                     let icon = app.group_status_icon(*group_idx);
-                    let text = format!(
-                        " {} {}  ({}/{} selected)",
-                        icon, group.label, selected_in_group, total_in_group
-                    );
-                    let base_style = if is_cursor {
-                        Style::default().bg(theme::CURSOR_BG).fg(col)
+                    let count = format!("{selected_in_group}/{total_in_group}");
+                    let row_style = if is_cursor {
+                        Style::default().bg(theme::CURSOR_BG).fg(theme::CURSOR_FG)
                     } else {
                         Style::default()
-                            .fg(col)
-                            .bg(Color::Rgb(15, 15, 30))
-                            .add_modifier(Modifier::BOLD)
+                            .bg(theme::PANEL_BG)
+                            .fg(theme::TEXT_SECONDARY)
                     };
-                    ListItem::new(text).style(base_style)
+                    let accent_style = if is_cursor {
+                        Style::default()
+                            .fg(theme::CURSOR_FG)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme::ACCENT)
+                    };
+                    let label_style = if is_cursor {
+                        Style::default()
+                            .fg(theme::CURSOR_FG)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(theme::TEXT_SECONDARY)
+                    };
+                    let meta_style = if is_cursor {
+                        Style::default().fg(theme::CURSOR_FG)
+                    } else {
+                        Style::default().fg(theme::TEXT_MUTED)
+                    };
+
+                    ListItem::new(Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled("─", accent_style),
+                        Span::raw(" "),
+                        Span::styled(icon, accent_style),
+                        Span::raw(" "),
+                        Span::styled(group.label.clone(), label_style),
+                        Span::styled("  ", meta_style),
+                        Span::styled(count, meta_style),
+                        Span::styled(" selected", meta_style),
+                    ]))
+                    .style(row_style)
                 }
                 ListEntry::Check { check_idx, .. } => {
                     let check = &app.checks[*check_idx];
                     let sel_icon = if app.selected[*check_idx] {
-                        Span::styled("[✓]", Style::default().fg(Color::Green))
+                        Span::styled(
+                            "◉",
+                            Style::default()
+                                .fg(Color::Green)
+                                .add_modifier(Modifier::BOLD),
+                        )
                     } else {
-                        Span::styled("[ ]", Style::default().fg(Color::DarkGray))
+                        Span::styled("○", Style::default().fg(Color::DarkGray))
                     };
                     let status = &app.statuses[*check_idx];
-                    let icon = status.icon();
+
+                    // Use animated spinner for running checks
+                    let icon = if matches!(status, CheckStatus::Running) {
+                        spinner_frame()
+                    } else {
+                        status.icon()
+                    };
+
                     let elapsed_str = app.elapsed[*check_idx]
                         .map(|d| format!(" {:.1}s", d.as_secs_f32()))
                         .unwrap_or_default();
 
                     let row_style = status_row_style(status, is_cursor);
 
-                    // Build rich line with styled spans
+                    // Build rich line with styled spans and better icons
                     let (status_icon_span, name_span) = match status {
                         CheckStatus::Passed | CheckStatus::ManualPassed => (
-                            Span::styled(icon, Style::default().fg(theme::STATUS_PASS)),
+                            Span::styled(
+                                "✔",
+                                Style::default()
+                                    .fg(theme::STATUS_PASS)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
                             Span::styled(
                                 format!(
                                     " {:<width$}{elapsed_str}",
@@ -644,7 +723,12 @@ fn draw_check_list(f: &mut Frame, app: &mut App, area: Rect) {
                             ),
                         ),
                         CheckStatus::Failed | CheckStatus::ManualFailed => (
-                            Span::styled(icon, Style::default().fg(theme::STATUS_FAIL)),
+                            Span::styled(
+                                "✘",
+                                Style::default()
+                                    .fg(theme::STATUS_FAIL)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
                             Span::styled(
                                 format!(
                                     " {:<width$}{elapsed_str}",
@@ -657,7 +741,12 @@ fn draw_check_list(f: &mut Frame, app: &mut App, area: Rect) {
                             ),
                         ),
                         CheckStatus::Running => (
-                            Span::styled(icon, Style::default().fg(theme::STATUS_RUNNING)),
+                            Span::styled(
+                                icon,
+                                Style::default()
+                                    .fg(theme::STATUS_RUNNING)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
                             Span::styled(
                                 format!(
                                     " {:<width$}{elapsed_str}",
@@ -669,8 +758,19 @@ fn draw_check_list(f: &mut Frame, app: &mut App, area: Rect) {
                                     .add_modifier(Modifier::BOLD),
                             ),
                         ),
+                        CheckStatus::Skipped => (
+                            Span::styled("⊘", Style::default().fg(theme::STATUS_SKIP)),
+                            Span::styled(
+                                format!(
+                                    " {:<width$}{elapsed_str}",
+                                    check.name,
+                                    width = name_width.max(1)
+                                ),
+                                Style::default().fg(theme::STATUS_SKIP),
+                            ),
+                        ),
                         _ => (
-                            Span::styled(icon, Style::default().fg(theme::STATUS_PENDING)),
+                            Span::styled("◦", Style::default().fg(theme::STATUS_PENDING)),
                             Span::styled(
                                 format!(
                                     " {:<width$}{elapsed_str}",
@@ -685,8 +785,18 @@ fn draw_check_list(f: &mut Frame, app: &mut App, area: Rect) {
                     // Override fg when cursor is active (keep the bg but use cursor fg)
                     let (sel_span, status_span, name_span) = if is_cursor {
                         (
-                            Span::styled("[✓]", Style::default().fg(theme::CURSOR_FG)),
-                            Span::styled(icon, Style::default().fg(theme::CURSOR_FG)),
+                            Span::styled(
+                                "◉",
+                                Style::default()
+                                    .fg(theme::CURSOR_FG)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(
+                                icon,
+                                Style::default()
+                                    .fg(theme::CURSOR_FG)
+                                    .add_modifier(Modifier::BOLD),
+                            ),
                             Span::styled(
                                 format!(
                                     " {:<width$}{elapsed_str}",
@@ -879,29 +989,24 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
             " Tab/↓ next  ↑ prev  Enter confirm  q quit".to_string(),
             Color::DarkGray,
         ),
-        AppMode::Selecting => {
-            let (p, fail, s) = app.summary_counts();
-            (
-                format!(
-                    " ↑↓ navigate  Space toggle  a all  n none  Enter run  m mouse  q quit \
-                     │ staged:{}  pass:{p} fail:{fail} skip:{s}",
-                    app.staged_files.len()
-                ),
-                Color::DarkGray,
-            )
-        }
-        AppMode::Running { .. } => (" r reset  q quit  (running…)".to_string(), Color::Yellow),
-        AppMode::AwaitingManualResult { .. } => {
-            (" p pass  f fail  q quit".to_string(), Color::Magenta)
-        }
+        AppMode::Selecting => (
+            " ↑↓ navigate  Space toggle  a all  n none  Enter run  m mouse  q quit".to_string(),
+            Color::DarkGray,
+        ),
+        AppMode::Running { .. } => (" r reset  q quit".to_string(), Color::Rgb(180, 180, 140)),
+        AppMode::AwaitingManualResult { .. } => (
+            " p pass  f fail  q quit".to_string(),
+            Color::Rgb(200, 150, 200),
+        ),
         AppMode::Done => {
-            let (p, fail, s) = app.summary_counts();
-            let color = if fail > 0 { Color::Red } else { Color::Green };
+            let (_p, fail, _s) = app.summary_counts();
+            let color = if fail > 0 {
+                theme::STATUS_FAIL
+            } else {
+                Color::Rgb(100, 200, 120) // Softer green
+            };
             (
-                format!(
-                    " Enter rerun  r reset  q quit  ↑↓ logs  PgUp/Dn scroll  m mouse \
-                     │ pass:{p} fail:{fail} skip:{s}"
-                ),
+                " Enter rerun  r reset  R reset audited  x reset one  q quit".to_string(),
                 color,
             )
         }

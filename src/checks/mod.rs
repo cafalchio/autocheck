@@ -33,6 +33,8 @@ pub struct Check {
     pub cmd: Cmd,
     #[serde(default)]
     pub manual: bool,
+    #[serde(default)]
+    pub audited: bool,
 }
 
 // ── Group ──────────────────────────────────────────────────────────────────
@@ -152,7 +154,8 @@ mod tests {
                     "name": "fmt",
                     "description": "Check formatting",
                     "cmd": ["cargo", "fmt", "--check"],
-                    "manual": false
+                    "manual": false,
+                    "audited": false
                 }]
             }]
         }"#
@@ -215,6 +218,24 @@ mod tests {
     fn test_manual_defaults_false() {
         let cfg = ChecksConfig::from_str(valid_json()).unwrap();
         assert!(!cfg.groups[0].checks[0].manual);
+    }
+
+    #[test]
+    fn test_audited_defaults_false() {
+        let cfg = ChecksConfig::from_str(valid_json()).unwrap();
+        assert!(!cfg.groups[0].checks[0].audited);
+    }
+
+    #[test]
+    fn test_audited_true_loads() {
+        let json = r#"{
+            "groups": [{
+                "label": "G",
+                "checks": [{"name":"x","description":"d","cmd":"cargo fmt","audited":true}]
+            }]
+        }"#;
+        let cfg = ChecksConfig::from_str(json).unwrap();
+        assert!(cfg.groups[0].checks[0].audited);
     }
 
     #[cfg(test)]

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -27,28 +27,10 @@ pub enum AppMode {
 // ── Setup tab ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SetupTab {
-    Run,
-    Settings,
-}
-
-// ── Setup focus ────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum SetupField {
     ProjectPath,
     Branch,
     Config,
-}
-
-// ── Settings focus ─────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum SettingsField {
-    RunLogPath,
-    FailedLogPath,
-    AuditDir,
-    MouseDefault,
 }
 
 // ── Check status ───────────────────────────────────────────────────────────
@@ -110,6 +92,7 @@ pub struct App {
     // Output
     pub output_lines: Vec<String>,
     pub check_logs: HashMap<usize, Vec<String>>,
+    pub audited_passed: HashSet<usize>,
     pub output_scroll: usize,
     pub output_pane_height: u16,
 
@@ -123,19 +106,11 @@ pub struct App {
     pub staged_files: Vec<String>,
 
     // Setup form
-    pub setup_tab: SetupTab,
     pub setup_project_path: String,
     pub setup_branch: String,
     pub setup_focus: SetupField,
     pub setup_error: Option<String>,
     pub setup_log: Vec<String>,
-
-    // Settings tab fields
-    pub settings_run_log_path: String,
-    pub settings_failed_log_path: String,
-    pub settings_audit_dir: String,
-    pub settings_mouse_default: bool,
-    pub settings_focus: SettingsField,
 
     // Config selector
     pub config_paths: Vec<PathBuf>,
@@ -182,6 +157,7 @@ impl App {
             list_area: None,
             output_lines: Vec::new(),
             check_logs: HashMap::new(),
+            audited_passed: HashSet::new(),
             output_scroll: 0,
             output_pane_height: 20,
             log_rx: None,
@@ -189,22 +165,16 @@ impl App {
             repo_root: PathBuf::from("."),
             current_branch: String::new(),
             staged_files: Vec::new(),
-            setup_tab: SetupTab::Run,
             setup_project_path: saved.repo.clone(),
             setup_branch: saved.branch.clone(),
             setup_focus: SetupField::ProjectPath,
             setup_error: None,
             setup_log: Vec::new(),
-            settings_run_log_path: saved.run_log_path.clone(),
-            settings_failed_log_path: saved.failed_log_path.clone(),
-            settings_audit_dir: saved.audit_dir.clone(),
-            settings_mouse_default: saved.mouse_capture_default,
-            settings_focus: SettingsField::RunLogPath,
             config_paths,
             config_idx,
             config_dropdown_open: false,
             selected_config_path: None,
-            mouse_capture: saved.mouse_capture_default,
+            mouse_capture: true,
             sys: System::new_all(),
             cpu_usage: 0.0,
             mem_usage: 0.0,
@@ -302,20 +272,6 @@ impl App {
         };
     }
 
-    pub fn setup_tab_next(&mut self) {
-        self.setup_tab = match self.setup_tab {
-            SetupTab::Run => SetupTab::Settings,
-            SetupTab::Settings => SetupTab::Run,
-        };
-    }
-
-    pub fn setup_tab_prev(&mut self) {
-        self.setup_tab = match self.setup_tab {
-            SetupTab::Run => SetupTab::Settings,
-            SetupTab::Settings => SetupTab::Run,
-        };
-    }
-
     pub fn setup_type_char(&mut self, c: char) {
         match self.setup_focus {
             SetupField::ProjectPath => {
@@ -348,65 +304,6 @@ impl App {
             }
             SetupField::Config => {}
         }
-    }
-
-    // ── Settings tab methods ──────────────────────────────────────────────
-
-    pub fn settings_focus_next(&mut self) {
-        self.settings_focus = match self.settings_focus {
-            SettingsField::RunLogPath => SettingsField::FailedLogPath,
-            SettingsField::FailedLogPath => SettingsField::AuditDir,
-            SettingsField::AuditDir => SettingsField::MouseDefault,
-            SettingsField::MouseDefault => SettingsField::RunLogPath,
-        };
-    }
-
-    pub fn settings_focus_prev(&mut self) {
-        self.settings_focus = match self.settings_focus {
-            SettingsField::RunLogPath => SettingsField::MouseDefault,
-            SettingsField::FailedLogPath => SettingsField::RunLogPath,
-            SettingsField::AuditDir => SettingsField::FailedLogPath,
-            SettingsField::MouseDefault => SettingsField::AuditDir,
-        };
-    }
-
-    pub fn settings_type_char(&mut self, c: char) {
-        match self.settings_focus {
-            SettingsField::RunLogPath => self.settings_run_log_path.push(c),
-            SettingsField::FailedLogPath => self.settings_failed_log_path.push(c),
-            SettingsField::AuditDir => self.settings_audit_dir.push(c),
-            SettingsField::MouseDefault => {} // toggle-only field
-        }
-    }
-
-    pub fn settings_backspace(&mut self) {
-        match self.settings_focus {
-            SettingsField::RunLogPath => { self.settings_run_log_path.pop(); }
-            SettingsField::FailedLogPath => { self.settings_failed_log_path.pop(); }
-            SettingsField::AuditDir => { self.settings_audit_dir.pop(); }
-            SettingsField::MouseDefault => {} // toggle-only field
-        }
-    }
-
-    pub fn settings_toggle_mouse(&mut self) {
-        self.settings_mouse_default = !self.settings_mouse_default;
-    }
-
-    pub fn save_settings(&self) {
-        let cfg = SavedConfig {
-            repo: self.setup_project_path.clone(),
-            branch: self.setup_branch.clone(),
-            selected_config: self
-                .selected_config_path
-                .as_ref()
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-            run_log_path: self.settings_run_log_path.clone(),
-            failed_log_path: self.settings_failed_log_path.clone(),
-            audit_dir: self.settings_audit_dir.clone(),
-            mouse_capture_default: self.settings_mouse_default,
-        };
-        let _ = cfg.save();
     }
 
     // ── Setup confirmation (T-11) ─────────────────────────────────────────
@@ -451,10 +348,6 @@ impl App {
                 .as_ref()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default(),
-            run_log_path: self.settings_run_log_path.clone(),
-            failed_log_path: self.settings_failed_log_path.clone(),
-            audit_dir: self.settings_audit_dir.clone(),
-            mouse_capture_default: self.settings_mouse_default,
         };
         let _ = saved.save();
 
@@ -636,15 +529,18 @@ impl App {
     // ── Command execution (T-15) ──────────────────────────────────────────
 
     pub fn start_running(&mut self) {
-        // Find first selected check
-        let first = self.selected.iter().position(|&s| s);
+        let first = self
+            .selected
+            .iter()
+            .enumerate()
+            .find(|(idx, sel)| **sel && !self.is_audited_locked(*idx))
+            .map(|(idx, _)| idx);
         if first.is_none() {
             return;
         }
 
-        // Mark unselected as skipped
         for (i, &sel) in self.selected.iter().enumerate() {
-            if !sel {
+            if !sel || self.is_audited_locked(i) {
                 self.statuses[i] = CheckStatus::Skipped;
             }
         }
@@ -663,7 +559,7 @@ impl App {
         let checks = self.checks.clone();
         let selected = self.selected.clone();
         let repo_root = self.repo_root.clone();
-        // We send structured messages: "STATUS:idx:value" or "LOG:idx:line" or "ELAPSED:idx:ms"
+        let audited_passed = self.audited_passed.clone();
         let tx_clone = tx.clone();
 
         std::thread::spawn(move || {
@@ -671,7 +567,7 @@ impl App {
                 if cancel.load(Ordering::Relaxed) {
                     break;
                 }
-                if !selected[idx] {
+                if !selected[idx] || (check.audited && audited_passed.contains(&idx)) {
                     continue;
                 }
 
@@ -708,12 +604,13 @@ impl App {
 
                 if check.manual && exit_ok {
                     let _ = tx_clone.send(format!("STATUS:{idx}:AwaitManual"));
-                    // Block until manual verdict arrives (signalled by MANUAL:idx:pass/fail)
-                    // We'll handle this in the event loop instead — just mark status
                     let _ = tx_clone.send(format!("MANUAL:{idx}:prompt"));
-                    return; // pause thread; event loop will restart via continue_after_manual
+                    return;
                 } else {
                     let _ = tx_clone.send(format!("STATUS:{idx}:{status}"));
+                    if check.audited && exit_ok {
+                        let _ = tx_clone.send(format!("AUDITED_PASS:{idx}"));
+                    }
                 }
             }
             let _ = tx_clone.send("DONE:".to_string());
@@ -785,6 +682,10 @@ impl App {
                                 manual_prompt = Some(idx);
                             }
                         }
+                    } else if let Some(rest) = m.strip_prefix("AUDITED_PASS:") {
+                        if let Ok(idx) = rest.parse::<usize>() {
+                            self.record_audited_pass(idx);
+                        }
                     } else if m.starts_with("DONE:") {
                         done = true;
                     }
@@ -807,6 +708,7 @@ impl App {
             let line = format!("[manual] {} — PASSED", self.checks[idx].name);
             self.check_logs.entry(idx).or_default().push(line.clone());
             self.output_lines.push(line);
+            self.record_audited_pass(idx);
             self.continue_after_manual(idx);
         }
     }
@@ -825,8 +727,9 @@ impl App {
         // Find next selected check after done_idx
         let next = self.selected[done_idx + 1..]
             .iter()
-            .position(|&s| s)
-            .map(|rel| rel + done_idx + 1);
+            .enumerate()
+            .find(|(rel, s)| **s && !self.is_audited_locked(done_idx + 1 + *rel))
+            .map(|(rel, _)| rel + done_idx + 1);
 
         if let Some(next_idx) = next {
             // Resume execution by spawning a new thread for remaining checks
@@ -846,16 +749,17 @@ impl App {
         let checks = self.checks.clone();
         let selected = self.selected.clone();
         let repo_root = self.repo_root.clone();
+        let audited_passed = self.audited_passed.clone();
 
         std::thread::spawn(move || {
             for idx in start_idx..checks.len() {
                 if cancel.load(Ordering::Relaxed) {
                     break;
                 }
-                if !selected[idx] {
+                let check = &checks[idx];
+                if !selected[idx] || (check.audited && audited_passed.contains(&idx)) {
                     continue;
                 }
-                let check = &checks[idx];
                 let _ = tx.send(format!("STATUS:{idx}:Running"));
                 let _ = tx.send(format!("LOG:{idx}:▶ {}", check.name));
                 let start = Instant::now();
@@ -890,6 +794,9 @@ impl App {
                     return;
                 } else {
                     let _ = tx.send(format!("STATUS:{idx}:{status}"));
+                    if check.audited && exit_ok {
+                        let _ = tx.send(format!("AUDITED_PASS:{idx}"));
+                    }
                 }
             }
             let _ = tx.send("DONE:".to_string());
@@ -903,6 +810,7 @@ impl App {
     fn finish_run(&mut self) {
         self.mode = AppMode::Done;
         self.write_logs();
+        self.save_audited_state();
     }
 
     // ── Cancellation (T-16) ───────────────────────────────────────────────
@@ -917,6 +825,22 @@ impl App {
         self.cancel_run();
         self.reset_run_state();
         self.mode = AppMode::Selecting;
+    }
+
+    pub fn reset_audited(&mut self) {
+        self.audited_passed.clear();
+        self.save_audited_state();
+        self.reset_to_selecting();
+    }
+
+    pub fn reset_current_audited(&mut self) {
+        if let Some(ListEntry::Check { check_idx, .. }) = self.list_entries.get(self.list_cursor) {
+            if self.checks[*check_idx].audited {
+                self.audited_passed.remove(check_idx);
+                self.save_audited_state();
+                self.statuses[*check_idx] = CheckStatus::Pending;
+            }
+        }
     }
 
     // ── Done screen actions (T-22) ────────────────────────────────────────
@@ -950,48 +874,7 @@ impl App {
                 }
             }
         }
-        let _ = std::fs::write(self.repo_root.join(&self.settings_run_log_path), &run_content);
-
-        // ── Audit archive ──────────────────────────────────────────────────
-        let audit_dir = self.repo_root.join(&self.settings_audit_dir);
-        if std::fs::create_dir_all(&audit_dir).is_ok() {
-            // Timestamp: use SystemTime to build YYYY-MM-DDTHH-MM-SS
-            let ts = {
-                use std::time::{SystemTime, UNIX_EPOCH};
-                let secs = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                // Manual UTC decomposition (no chrono dependency)
-                let s = secs % 60;
-                let m = (secs / 60) % 60;
-                let h = (secs / 3600) % 24;
-                let days = secs / 86400;
-                // Approximate date from days-since-epoch (good enough for a log filename)
-                let year = 1970 + days / 365;
-                let day_of_year = days % 365;
-                let month = day_of_year / 30 + 1;
-                let day = day_of_year % 30 + 1;
-                format!("{year:04}-{month:02}-{day:02}T{h:02}-{m:02}-{s:02}")
-            };
-
-            let audit_file = audit_dir.join(format!("{ts}.log"));
-            let _ = std::fs::write(&audit_file, &run_content);
-
-            // Update index.txt
-            let (passed, failed, skipped) = self.summary_counts();
-            let index_line = format!(
-                "{ts}  pass:{passed} fail:{failed} skip:{skipped}  branch:{}\n",
-                self.current_branch
-            );
-            let index_path = audit_dir.join("index.txt");
-            // Read existing, prepend new line, trim to 100 entries
-            let existing = std::fs::read_to_string(&index_path).unwrap_or_default();
-            let mut lines: Vec<&str> = existing.lines().collect();
-            lines.insert(0, index_line.trim_end_matches('\n'));
-            lines.truncate(100);
-            let _ = std::fs::write(&index_path, lines.join("\n") + "\n");
-        }
+        let _ = std::fs::write(self.repo_root.join("last_run.log"), &run_content);
 
         // last_failed.log
         let log_path = self
@@ -1002,7 +885,7 @@ impl App {
                     .ok()
                     .and_then(|c| c.path_log_file)
             })
-            .unwrap_or_else(|| self.settings_failed_log_path.clone());
+            .unwrap_or_else(|| "last_failed.log".to_string());
 
         let mut fail_content = header;
         let mut has_failures = false;
@@ -1031,6 +914,51 @@ impl App {
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
+    fn is_audited_locked(&self, idx: usize) -> bool {
+        self.checks[idx].audited && self.audited_passed.contains(&idx)
+    }
+
+    fn audited_state_path(&self) -> PathBuf {
+        self.repo_root.join(".autocheck_audited")
+    }
+
+    fn audited_log_path(&self, idx: usize) -> PathBuf {
+        self.repo_root
+            .join(".autocheck_audited")
+            .join(format!("{}.log", self.checks[idx].name))
+    }
+
+    fn load_audited_state(&mut self) {
+        self.audited_passed.clear();
+        for idx in 0..self.checks.len() {
+            if self.checks[idx].audited && self.audited_log_path(idx).exists() {
+                self.audited_passed.insert(idx);
+            }
+        }
+    }
+
+    fn save_audited_state(&self) {
+        let dir = self.audited_state_path();
+        let _ = std::fs::create_dir_all(&dir);
+    }
+
+    fn record_audited_pass(&mut self, idx: usize) {
+        if !self.checks[idx].audited {
+            return;
+        }
+        let dir = self.audited_state_path();
+        let _ = std::fs::create_dir_all(&dir);
+        let mut content = format!("check={}\nstatus={:?}\n", self.checks[idx].name, self.statuses[idx]);
+        if let Some(log) = self.check_logs.get(&idx) {
+            for line in log {
+                content.push_str(line);
+                content.push('\n');
+            }
+        }
+        let _ = std::fs::write(self.audited_log_path(idx), content);
+        self.audited_passed.insert(idx);
+    }
+
     pub fn rebuild_list_entries(&mut self) {
         self.list_entries.clear();
         for (g_idx, _group) in self.groups.iter().enumerate() {
@@ -1053,8 +981,13 @@ impl App {
     }
 
     pub fn reset_run_state(&mut self) {
-        for s in self.statuses.iter_mut() {
-            *s = CheckStatus::Pending;
+        let audited_passed = self.audited_passed.clone();
+        for (idx, status) in self.statuses.iter_mut().enumerate() {
+            *status = if self.checks[idx].audited && audited_passed.contains(&idx) {
+                CheckStatus::Passed
+            } else {
+                CheckStatus::Pending
+            };
         }
         self.output_lines.clear();
         self.check_logs.clear();
@@ -1077,6 +1010,8 @@ impl App {
         self.selected = vec![true; self.checks.len()];
         self.statuses = vec![CheckStatus::Pending; self.checks.len()];
         self.elapsed = vec![None; self.checks.len()];
+        self.load_audited_state();
+        self.reset_run_state();
         self.rebuild_list_entries();
     }
 
@@ -1287,6 +1222,7 @@ mod tests {
             list_area: None,
             output_lines: Vec::new(),
             check_logs: HashMap::new(),
+            audited_passed: HashSet::new(),
             output_scroll: 0,
             output_pane_height: 20,
             log_rx: None,
@@ -1294,17 +1230,11 @@ mod tests {
             repo_root: PathBuf::from("."),
             current_branch: String::new(),
             staged_files: Vec::new(),
-            setup_tab: SetupTab::Run,
             setup_project_path: String::new(),
             setup_branch: String::new(),
             setup_focus: SetupField::ProjectPath,
             setup_error: None,
             setup_log: Vec::new(),
-            settings_run_log_path: "last_run.log".into(),
-            settings_failed_log_path: "last_failed.log".into(),
-            settings_audit_dir: ".autocheck/runs".into(),
-            settings_mouse_default: true,
-            settings_focus: SettingsField::RunLogPath,
             config_paths: Vec::new(),
             config_idx: 0,
             config_dropdown_open: false,
@@ -1324,6 +1254,17 @@ mod tests {
             description: "desc".into(),
             cmd: Cmd::Array(vec!["true".into()]),
             manual: false,
+            audited: false,
+        }
+    }
+
+    fn audited_check(name: &str) -> Check {
+        Check {
+            name: name.into(),
+            description: "desc".into(),
+            cmd: Cmd::Array(vec!["true".into()]),
+            manual: false,
+            audited: true,
         }
     }
 
@@ -1405,50 +1346,27 @@ mod tests {
     }
 
     #[test]
-    fn test_app_starts_on_run_tab() {
+    fn test_app_starts_in_setup_mode() {
         let app = App::new();
-        assert_eq!(app.setup_tab, SetupTab::Run);
+        assert_eq!(app.mode, AppMode::Setup);
     }
 
     #[test]
-    fn test_settings_focus_cycles() {
-        let mut app = make_app_with_checks(vec![]);
-        // starts at RunLogPath (set by make_app_with_checks)
-        assert_eq!(app.settings_focus, SettingsField::RunLogPath);
-        app.settings_focus_next();
-        assert_eq!(app.settings_focus, SettingsField::FailedLogPath);
-        app.settings_focus_next();
-        assert_eq!(app.settings_focus, SettingsField::AuditDir);
-        app.settings_focus_next();
-        assert_eq!(app.settings_focus, SettingsField::MouseDefault);
-        app.settings_focus_next();
-        assert_eq!(app.settings_focus, SettingsField::RunLogPath);
+    fn test_reset_keeps_audited_checks_passed() {
+        let mut app = make_app_with_checks(vec![audited_check("audit")]);
+        app.audited_passed.insert(0);
+        app.reset_run_state();
+        assert_eq!(app.statuses[0], CheckStatus::Passed);
     }
 
     #[test]
-    fn test_settings_type_char_appends() {
-        let mut app = make_app_with_checks(vec![]);
-        app.settings_focus = SettingsField::RunLogPath;
-        app.settings_type_char('x');
-        assert!(app.settings_run_log_path.ends_with('x'));
-    }
-
-    #[test]
-    fn test_settings_backspace_removes() {
-        let mut app = make_app_with_checks(vec![]);
-        app.settings_run_log_path = "abc".into();
-        app.settings_focus = SettingsField::RunLogPath;
-        app.settings_backspace();
-        assert_eq!(app.settings_run_log_path, "ab");
-    }
-
-    #[test]
-    fn test_settings_toggle_mouse() {
-        let mut app = make_app_with_checks(vec![]);
-        let original = app.settings_mouse_default;
-        app.settings_toggle_mouse();
-        assert_eq!(app.settings_mouse_default, !original);
-        app.settings_toggle_mouse();
-        assert_eq!(app.settings_mouse_default, original);
+    fn test_reset_current_audited_unlocks_selected_check() {
+        let mut app = make_app_with_checks(vec![audited_check("audit")]);
+        app.audited_passed.insert(0);
+        app.list_cursor = 1;
+        app.statuses[0] = CheckStatus::Passed;
+        app.reset_current_audited();
+        assert!(!app.audited_passed.contains(&0));
+        assert_eq!(app.statuses[0], CheckStatus::Pending);
     }
 }

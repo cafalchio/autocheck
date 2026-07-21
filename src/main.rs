@@ -15,7 +15,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
-use app::{App, AppMode, SetupTab};
+use app::{App, AppMode};
 
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
@@ -120,68 +120,30 @@ fn handle_key(app: &mut App, code: KeyCode, _mods: KeyModifiers) -> bool {
                 return false;
             }
 
-            if app.setup_tab == SetupTab::Settings {
-                match code {
-                    KeyCode::Char('q') => return true,
-                    KeyCode::F(1) => app.setup_tab = SetupTab::Run,
-                    KeyCode::F(2) => app.setup_tab = SetupTab::Settings,
-                    KeyCode::Tab | KeyCode::Down => app.settings_focus_next(),
-                    KeyCode::BackTab | KeyCode::Up => app.settings_focus_prev(),
-                    KeyCode::Backspace => app.settings_backspace(),
-                    KeyCode::Char(' ') => app.settings_toggle_mouse(),
-                    KeyCode::Char(c) => app.settings_type_char(c),
-                    KeyCode::Enter => {
-                        app.save_settings();
-                        app.setup_tab = SetupTab::Run;
+            match code {
+                KeyCode::Char('q') => return true,
+                KeyCode::Left => {
+                    if app.setup_focus == app::SetupField::Config {
+                        app.prev_config();
                     }
-                    _ => {}
                 }
-            } else {
-                match code {
-                    KeyCode::Char('q') => return true,
-                    KeyCode::F(1) => app.setup_tab = SetupTab::Run,
-                    KeyCode::F(2) => app.setup_tab = SetupTab::Settings,
-                    KeyCode::Tab | KeyCode::Down => {
-                        if app.setup_tab == SetupTab::Run
-                            && app.setup_focus == app::SetupField::Config
-                        {
-                            app.setup_tab_next();
-                            app.setup_focus = app::SetupField::ProjectPath;
-                        } else if app.setup_tab == SetupTab::Run {
-                            app.setup_focus_next();
-                        }
+                KeyCode::Right => {
+                    if app.setup_focus == app::SetupField::Config {
+                        app.next_config();
                     }
-                    KeyCode::BackTab | KeyCode::Up => {
-                        if app.setup_tab == SetupTab::Run
-                            && app.setup_focus == app::SetupField::ProjectPath
-                        {
-                            app.setup_tab_prev();
-                            app.setup_focus = app::SetupField::Config;
-                        } else if app.setup_tab == SetupTab::Run {
-                            app.setup_focus_prev();
-                        }
-                    }
-                    KeyCode::Left => {
-                        if app.setup_focus == app::SetupField::Config {
-                            app.prev_config();
-                        }
-                    }
-                    KeyCode::Right => {
-                        if app.setup_focus == app::SetupField::Config {
-                            app.next_config();
-                        }
-                    }
-                    KeyCode::Char(' ') => {
-                        if app.setup_focus == app::SetupField::Config {
-                            app.toggle_dropdown();
-                        }
-                    }
-                    KeyCode::Esc => app.close_dropdown(),
-                    KeyCode::Enter => app.confirm_setup(),
-                    KeyCode::Backspace => app.setup_backspace(),
-                    KeyCode::Char(c) => app.setup_type_char(c),
-                    _ => {}
                 }
+                KeyCode::Tab | KeyCode::Down => app.setup_focus_next(),
+                KeyCode::BackTab | KeyCode::Up => app.setup_focus_prev(),
+                KeyCode::Char(' ') => {
+                    if app.setup_focus == app::SetupField::Config {
+                        app.toggle_dropdown();
+                    }
+                }
+                KeyCode::Esc => app.close_dropdown(),
+                KeyCode::Enter => app.confirm_setup(),
+                KeyCode::Backspace => app.setup_backspace(),
+                KeyCode::Char(c) => app.setup_type_char(c),
+                _ => {}
             }
         }
 
@@ -232,6 +194,8 @@ fn handle_key(app: &mut App, code: KeyCode, _mods: KeyModifiers) -> bool {
             KeyCode::Char('q') => return true,
             KeyCode::Enter => app.rerun(),
             KeyCode::Char('r') => app.reset_to_selecting(),
+            KeyCode::Char('R') => app.reset_audited(),
+            KeyCode::Char('x') => app.reset_current_audited(),
             KeyCode::Up => app.list_up(),
             KeyCode::Down => app.list_down(),
             KeyCode::Home => app.scroll_to_top(),

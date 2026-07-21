@@ -10,13 +10,15 @@
           "name": "hello",
           "description": "Print a simple hello message",
           "cmd": ["echo", "Hello from AutoCheck!"],
-          "manual": false
+          "manual": false,
+          "audited": false
         },
         {
           "name": "world",
           "description": "Print a second greeting",
           "cmd": ["echo", "World is looking good."],
-          "manual": false
+          "manual": false,
+          "audited": false
         }
       ]
     },
@@ -28,19 +30,22 @@
           "name": "date",
           "description": "Print the current date and time",
           "cmd": ["date"],
-          "manual": false
+          "manual": false,
+          "audited": false
         },
         {
           "name": "whoami",
           "description": "Print the current user",
           "cmd": ["whoami"],
-          "manual": false
+          "manual": false,
+          "audited": false
         },
         {
           "name": "uptime",
           "description": "Show system uptime",
           "cmd": ["uptime"],
-          "manual": false
+          "manual": false,
+          "audited": false
         }
       ]
     },
@@ -52,7 +57,28 @@
           "name": "will-fail",
           "description": "This check always fails (exit code 1) to demonstrate failure styling",
           "cmd": ["sh", "-c", "echo 'Something went wrong!' && exit 1"],
-          "manual": false
+          "manual": false,
+          "audited": false
+        }
+      ]
+    },
+    {
+      "label": "Audited Tests",
+      "color": "Blue",
+      "checks": [
+        {
+          "name": "automated-audited",
+          "description": "Automated audited test that writes an audit line and succeeds",
+          "cmd": ["sh", "-c", "printf 'AUDIT automated test executed\n' && exit 0"],
+          "manual": false,
+          "audited": true
+        },
+        {
+          "name": "manual-audited",
+          "description": "Manual audited test that writes an audit line and waits for pass/fail confirmation",
+          "cmd": ["sh", "-c", "printf 'AUDIT manual test ready for review\n' && printf 'Press p to pass or f to fail.\n'"],
+          "manual": true,
+          "audited": true
         }
       ]
     },
@@ -64,139 +90,8 @@
           "name": "review",
           "description": "Manually confirm the output looks correct before proceeding",
           "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
-        }
-      ]
-    },
-    {
-      "label": "Manual Review",
-      "color": "Yellow",
-      "checks": [
-        {
-          "name": "review",
-          "description": "Manually confirm the output looks correct before proceeding",
-          "cmd": ["echo", "Please review the output above and press p or f."],
-          "manual": true
+          "manual": true,
+          "audited": false
         }
       ]
     }
