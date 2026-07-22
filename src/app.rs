@@ -185,7 +185,7 @@ impl App {
             config_idx,
             config_dropdown_open: false,
             selected_config_path: None,
-            mouse_capture: true,
+            mouse_capture: false,
             sys: System::new_all(),
             cpu_usage: 0.0,
             mem_usage: 0.0,
@@ -898,30 +898,33 @@ impl App {
     // ── Log file writing (T-19) ───────────────────────────────────────────
 
     fn write_logs(&self) {
-        let header = format!(
-            "Branch: {}\nStaged files: {}\n---\n",
-            self.current_branch,
-            if self.staged_files.is_empty() {
-                "(none)".to_string()
-            } else {
-                self.staged_files.join(", ")
-            }
-        );
+        let log_dir = self.audited_state_path();
+        let _ = std::fs::create_dir_all(&log_dir);
 
-        // last_run.log
-        let mut run_content = header.clone();
+        let header = vec![
+            format!("Branch: {}", self.current_branch),
+            format!(
+                "Staged files: {}",
+                if self.staged_files.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    self.staged_files.join(", ")
+                }
+            ),
+            "---".to_string(),
+        ];
+
+        let mut run_lines: Vec<String> = header.iter().map(|line| timestamped(line)).collect();
         for (idx, check) in self.checks.iter().enumerate() {
-            run_content.push_str(&format!("\n## {} — {:?}\n", check.name, self.statuses[idx]));
+            run_lines.push(timestamped(&format!("## {} — {:?}", check.name, self.statuses[idx])));
             if let Some(log) = self.check_logs.get(&idx) {
                 for line in log {
-                    run_content.push_str(line);
-                    run_content.push('\n');
+                    run_lines.push(timestamped(line));
                 }
             }
         }
-        let _ = std::fs::write(self.repo_root.join("last_run.log"), &run_content);
+        let _ = std::fs::write(log_dir.join("last_run.log"), run_lines.join("\n") + "\n");
 
-        // last_failed.log
         let log_path = self
             .selected_config_path
             .as_ref()
@@ -932,7 +935,7 @@ impl App {
             })
             .unwrap_or_else(|| "last_failed.log".to_string());
 
-        let mut fail_content = header;
+        let mut fail_lines: Vec<String> = header.iter().map(|line| timestamped(line)).collect();
         let mut has_failures = false;
         for (idx, check) in self.checks.iter().enumerate() {
             if matches!(
@@ -940,20 +943,18 @@ impl App {
                 CheckStatus::Failed | CheckStatus::ManualFailed
             ) {
                 has_failures = true;
-                fail_content.push_str(&format!("\n## {} — FAILED\n", check.name));
+                fail_lines.push(timestamped(&format!("## {} — FAILED", check.name)));
                 if let Some(log) = self.check_logs.get(&idx) {
                     for line in log {
-                        fail_content.push_str(line);
-                        fail_content.push('\n');
+                        fail_lines.push(timestamped(line));
                     }
                 }
             }
         }
         if has_failures {
-            let _ = std::fs::write(self.repo_root.join(&log_path), &fail_content);
+            let _ = std::fs::write(log_dir.join(&log_path), fail_lines.join("\n") + "\n");
         } else {
-            // Truncate/clear the failed log on success
-            let _ = std::fs::write(self.repo_root.join(&log_path), "");
+            let _ = std::fs::write(log_dir.join(&log_path), "");
         }
     }
 
@@ -1002,14 +1003,16 @@ impl App {
         }
         let dir = self.audited_state_path();
         let _ = std::fs::create_dir_all(&dir);
-        let mut content = format!("check={}\nstatus={:?}\n", self.checks[idx].name, self.statuses[idx]);
+        let mut lines = vec![
+            timestamped(&format!("check={}", self.checks[idx].name)),
+            timestamped(&format!("status={:?}", self.statuses[idx])),
+        ];
         if let Some(log) = self.check_logs.get(&idx) {
             for line in log {
-                content.push_str(line);
-                content.push('\n');
+                lines.push(timestamped(line));
             }
         }
-        let _ = std::fs::write(self.audited_log_path(idx), content);
+        let _ = std::fs::write(self.audited_log_path(idx), lines.join("\n") + "\n");
         self.audited_passed.insert(idx);
     }
 
@@ -1247,6 +1250,20 @@ fn run_check(
 
     let status = child.wait().map_err(|e| format!("Wait error: {e}"))?;
     Ok((combined, status.success()))
+}
+
+fn timestamped(line: &str) -> String {
+    format!("{} {}", timestamp_now(), line)
+}
+
+fn timestamp_now() -> String {
+    let out = Command::new("date").args(["+%Y-%m-%d %H:%M:%S"]).output();
+    match out {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        }
+        _ => "1970-01-01 00:00:00".to_string(),
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
